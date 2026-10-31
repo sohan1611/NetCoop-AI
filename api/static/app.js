@@ -3,7 +3,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   runId: null, health: null, runs: null, report: null, details: null,
   messages: [], consoleMessages: [], topology: null, view: 'console', search: '', acknowledged: readAcknowledged(),
-  running: false, scenariosReady: false, remediation: null, remediating: false,
+  running: false, scenariosReady: false, failAgent: null, remediation: null, remediating: false,
   playbooks: null, playbooksError: '', backendPending: 0, backendFailed: false, error: '',
 };
 let cy = null, source = null;
@@ -33,7 +33,26 @@ const PIPELINE_AGENTS = [
   ['normalizer', 'INGESTION'], ['performance', 'PERFORMANCE'],
   ['infrastructure', 'INFRASTRUCTURE'], ['connectivity', 'TOPOLOGY'], ['correlator', 'RCA'],
 ];
-const AGENT_STATUSES = new Set(['pending', 'running', 'complete', 'flagged', 'alert', 'failed', 'abstained', 'synthesizing']);
+const AGENT_STATUSES = new Set(['pending', 'running', 'complete', 'flagged', 'alert', 'failed', 'abstained', 'synthesizing', 'skipped']);
+function inputRejected() {
+  return (state.report?.status ?? state.details?.status) === 'error' ||
+    runMessages().some((m) => m.sender === 'normalizer' && m.type === 'ERROR');
+}
+function votingConsensus() {
+  if (inputRejected()) return null;
+  const votes = ['performance', 'infrastructure', 'connectivity'].flatMap((name) => {
+    const agent = state.details?.agents?.find((a) => a.name === name);
+    if (agent) return agent.status !== 'failed' && agent.top_hypothesis ? [agent.top_hypothesis] : [];
+    if (liveAgent(name).status === 'failed') return [];
+    const top = [...(findingPayload(name).hypotheses || [])].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
+    return top?.cause ? [top.cause] : [];
+  });
+  if (!votes.length) return null;
+  const counts = new Map();
+  votes.forEach((cause) => counts.set(cause, (counts.get(cause) || 0) + 1));
+  const k = Math.max(...counts.values()), n = votes.length;
+  return { k, n, label: k === n ? 'SYNCHRONIZED' : k > n / 2 ? 'RESOLVED' : 'DIVERGENT' };
+}
 function relativeTime(stamp) {
   const end = Date.parse(stamp);
   if (!Number.isFinite(end)) return '—';
@@ -51,8 +70,9 @@ function renderHero() {
   $('export-toggle').disabled = !r || state.running;
   $('hero-stats').classList.toggle('is-idle', !state.runId && !state.running);
   let health = '—', tone = '';
-  if (r?.status === 'diagnosed' && r.cause === 'normal') { health = 'Healthy'; tone = 'complete'; }
-  else if (r?.status === 'error' || (r?.status === 'diagnosed' && r.cause && r.confidence >= 0.75)) {
+  if (inputRejected()) { health = 'Unknown — input rejected'; tone = 'muted'; }
+  else if (r?.status === 'diagnosed' && r.cause === 'normal') { health = 'Healthy'; tone = 'complete'; }
+  else if (r?.status === 'diagnosed' && r.cause && r.confidence >= 0.75) {
     health = 'Critical'; tone = 'alert';
   } else if (r) { health = 'Degraded'; tone = 'flagged'; }
   $('mesh-health').textContent = health === '—' ? health : 'Campus Mesh: ' + health;
@@ -70,9 +90,9 @@ function renderHero() {
   const since = relativeTime(d?.finished_at);
   $('coordination-cycle').textContent = since === '—' ? '—' : 'Last Coordinated Sweep: ' + since;
   $('query-rounds').textContent = Number.isFinite(d?.rounds) ? d.rounds + ' query rounds' : '—';
-  $('active-incident').textContent = r?.incident_id ? 'Active Incident: ' + r.incident_id : '—';
+  $('active-incident').textContent = !inputRejected() && r?.incident_id ? 'Active Incident: ' + r.incident_id : '—';
   const severity = $('incident-severity');
-  severity.hidden = !r;
+  severity.hidden = !r || inputRejected();
   const high = r?.status === 'diagnosed' && r.cause && r.cause !== 'normal' && r.confidence >= 0.75;
   const medium = r?.confidence_category === 'medium';
   const low = ['low', 'insufficient'].includes(r?.confidence_category);
@@ -122,15 +142,17 @@ function liveAgent(name) {
   return view;
 }
 function renderPipeline() {
-  const agreement = state.details?.consensus;
-  $('pipeline-consensus').textContent = agreement && typeof agreement.synchronized === 'boolean' ?
-    `${agreement.synchronized ? 'SYNCHRONIZED' : 'DIVERGENT'} (${agreement.engaged ?? '—'}/${agreement.total ?? '—'} AGENTS ENGAGED)` : '—';
-  $('pipeline-consensus').className = agreement ? agreement.synchronized ? 'synchronized' : 'divergent' : '';
+  const agreement = votingConsensus();
+  $('pipeline-consensus').textContent = inputRejected() ? 'HALTED (input rejected)' : agreement ?
+    `${agreement.label} (${agreement.k}/${agreement.n} AGENTS ENGAGED)` : '—';
+  $('pipeline-consensus').className = agreement ? agreement.label.toLowerCase() : '';
   const grid = $('pipeline-agents');
   grid.classList.toggle('is-idle', !state.runId && !state.running);
   grid.replaceChildren();
   PIPELINE_AGENTS.forEach(([name, category], i) => {
-    const agent = state.details?.agents?.find((a) => a.name === name) || liveAgent(name);
+    const agent = inputRejected() && name !== 'normalizer' ?
+      { status: 'skipped', summary: 'Input rejected by normalizer', stats: {} } :
+      state.details?.agents?.find((a) => a.name === name) || liveAgent(name);
     const status = AGENT_STATUSES.has(agent.status) ? agent.status : 'pending';
     const card = el('article', undefined, 'agent-card ' + status);
     card.id = 'agent-' + name;
@@ -549,10 +571,9 @@ function renderRailStats() {
   $('packet-loss').textContent = worst ? worst.value + '%' : '—';
   $('packet-loss').className = 'metric-value' + (critical ? ' alert' : '');
   $('packet-loss-device').textContent = display(worst?.device_id);
-  $('rail-confidence').textContent = percent(state.report?.confidence ?? findingPayload('correlator').diagnosis?.confidence);
-  const consensus = state.details?.consensus;
-  $('rail-accord').textContent = consensus && Number.isFinite(consensus.in_accord) && Number.isFinite(consensus.total) ?
-    consensus.in_accord + '/' + consensus.total + ' Agents in Accord' : '—';
+  $('rail-confidence').textContent = inputRejected() ? '—' : percent(state.report?.confidence ?? findingPayload('correlator').diagnosis?.confidence);
+  const consensus = votingConsensus();
+  $('rail-accord').textContent = consensus ? consensus.k + '/' + consensus.n + ' Agents in Accord' : '—';
 }
 function renderRightRail() { renderLatency(); renderRailStats(); }
 const BUS_TYPES = new Set(['TASK', 'FINDING', 'QUERY', 'RESPONSE', 'ERROR']);
@@ -609,7 +630,8 @@ async function executeCommand(command) {
           reply('Use fail <agent>. Available: ' + inputs.map((input) => input.value).join(', ') + ', none'); break;
         }
         inputs.forEach((input) => { input.checked = input.value === argument; });
-        reply(argument !== 'none' ? 'Fault injection selected for next run: ' + argument : 'Fault injection cleared for next run.'); break;
+        state.failAgent = argument === 'none' ? null : argument;
+        reply(state.failAgent ? 'next run will inject failure into ' + state.failAgent : 'Fault injection cleared for next run.'); break;
       }
       case 'evidence': {
         const evidence = state.report?.supporting_evidence;
@@ -646,10 +668,14 @@ function renderReport() {
   $('report-state').hidden = !!r || (!state.running && !state.runId);
   $('report-content').hidden = !r && (state.running || !!state.runId);
   $('correlation-hash').textContent = 'CORRELATION HASH: ' + (r?.run_id ? '#' + r.run_id : '—');
-  const formats = d?.formats || [], mappings = d?.mappings || [];
+  const normalizer = findingPayload('normalizer');
+  const formats = normalizer.formats || d?.formats || [], mappings = normalizer.mappings || d?.mappings || [];
   const availableFormats = [...new Set([...formats, ...mappings.map((m) => m.source_format)].filter(Boolean))];
+  const converted = mappings.filter((m) => m.note || m.raw_value !== m.value).length;
   $('format-normalization').textContent = 'Format Normalization: ' + (availableFormats.length ?
-    availableFormats.length + ' conflicting formats (' + availableFormats.join(', ') + ')' : '—');
+    availableFormats.length === 1 && !converted ? availableFormats[0] + ' · no conflicts' :
+      availableFormats.length + (availableFormats.length === 1 ? ' format' : ' formats') + ' reconciled (' + availableFormats.join(', ') +
+      ') · ' + converted + (converted === 1 ? ' field' : ' fields') + ' converted' : '—');
   renderRootCause(); renderAffectedDevices(); renderEvidence(); renderTelemetry(); renderHypotheses(); renderActions();
   renderSearch();
 }
@@ -658,15 +684,18 @@ function renderRootCause() {
   box.replaceChildren();
   const exceptional = r && ['insufficient_evidence', 'error'].includes(r.status);
   box.className = 'root-cause' + (exceptional ? r.status === 'error' ? ' error' : ' insufficient' : '');
-  const label = el('p', exceptional ? display(r.status).replaceAll('_', ' ').toUpperCase() : 'SYNTHESIZED PROBABLE ROOT CAUSE', 'mono callout-label');
-  label.append(el('strong', r?.cause ? ' / ' + r.cause.replaceAll('_', ' ') : ''));
-  const cause = exceptional ? (r.limitations?.join('; ') || '—') : r?.suspected_root_cause;
+  const label = el('p', r?.status === 'error' ? 'INPUT REJECTED' : exceptional ? 'INSUFFICIENT EVIDENCE' : 'SYNTHESIZED PROBABLE ROOT CAUSE', 'mono callout-label');
+  if (!exceptional) label.append(el('strong', r?.cause ? ' / ' + r.cause.replaceAll('_', ' ') : ''));
+  const cause = r?.status === 'error' ? r.limitations?.join('; ') : r?.suspected_root_cause;
   box.append(label, el('p', cause ? '“' + cause + '”' : '—', 'root-cause-text'));
+  if (r?.status === 'insufficient_evidence' && r.limitations?.length) {
+    box.append(el('p', 'Limitations: ' + r.limitations.slice(0, 3).join('; '), 'muted report-limitations'));
+  }
   if (!exceptional) box.append(el('p', r?.affected_devices?.length ? 'Affected devices: ' + r.affected_devices.join(', ') : '—', 'affected-sentence'));
   const meta = el('div', undefined, 'callout-meta');
-  meta.append(el('span', 'Trigger Window: ' + display(w?.first) + ' – ' + display(w?.last)),
-    el('span', 'Multi-Agent Consensus: ' + percent(r?.confidence) + ' ' + display(r?.confidence_category) + ' Confidence'));
-  box.append(meta);
+  if (w?.first && w?.last && !inputRejected()) meta.append(el('span', 'Trigger Window: ' + w.first + ' – ' + w.last));
+  if (!inputRejected()) meta.append(el('span', 'Multi-Agent Consensus: ' + percent(r?.confidence) + ' ' + display(r?.confidence_category) + ' Confidence'));
+  if (meta.children.length) box.append(meta);
   if (!exceptional && r?.limitations?.length) box.append(el('p', 'Limitations: ' + r.limitations.join('; '), 'muted report-limitations'));
 }
 function renderAffectedDevices() {
@@ -728,6 +757,10 @@ function confidenceBar(value) {
 function renderHypotheses() {
   const r = state.report, d = state.details, primary = $('primary-hypothesis'), grid = $('alts');
   primary.replaceChildren(); grid.replaceChildren();
+  const rejected = inputRejected();
+  $('hypotheses-section').hidden = rejected;
+  $('hypotheses-empty').hidden = !rejected;
+  if (rejected) return;
   primary.append(el('p', 'Primary Hypothesis: ' + display(r?.cause) + ' on ' + (r?.affected_devices?.join(', ') || '—') +
     ' — ' + percent(r?.confidence) + ' (' + display(r?.confidence_category) + ')', 'primary-title mono'),
     confidenceBar(r?.confidence), el('p', d?.primary_rationale || '—', 'hypothesis-rationale'));
@@ -806,13 +839,13 @@ async function run(useUpload = true) {
   $('run').disabled = true; $('status').textContent = 'Starting…';
   setView('console'); renderShell();
   try {
-    const body = { fail_agent: $('fail-options').querySelector('input:checked')?.value || null };
+    const body = { fail_agent: state.failAgent };
     if (f) body.upload_id = (await json('/api/upload', { method: 'POST',
       headers: { 'Content-Type': 'application/json' }, body: await f.text() })).upload_id;
     else body.scenario = $('scenario').value || 'congestion';
     state.runId = (await json('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body) })).run_id;
-    $('status').textContent = 'Run ' + state.runId;
+    $('status').textContent = 'Run ' + state.runId + (body.fail_agent ? ' · failure injection: ' + body.fail_agent : '');
     $('run-modal').close();
     renderShell(); subscribeRun();
   } catch (err) {
@@ -868,6 +901,7 @@ $('run-form').addEventListener('submit', (event) => { event.preventDefault(); vo
     if (input.checked) $('fail-options').querySelectorAll('input').forEach((other) => {
       if (other !== input) other.checked = false;
     });
+    state.failAgent = $('fail-options').querySelector('input:checked')?.value || null;
   });
   label.append(input, el('span', name)); $('fail-options').append(label);
 });
