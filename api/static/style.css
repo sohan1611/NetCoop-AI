@@ -142,10 +142,6 @@ main { grid-column: 2; grid-row: 2; width: 100%; max-width: 1100px; min-width: 0
 .controls label { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 100%; color: var(--muted); }
 select, input[type=file] { width: 100%; max-width: 100%; padding: 6px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
 #status { width: 100%; overflow-wrap: anywhere; }
-.timeline { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow: auto; font: 11px/1.6 var(--font-mono); }
-.timeline li { padding: 4px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
-.tag { display: inline-block; margin-right: 6px; color: var(--dim); }
-.tag.QUERY { color: var(--amber); } .tag.ERROR { color: var(--red); } .tag.FINDING { color: var(--cyan); }
 #topo { height: 320px; border: 1px solid var(--border); border-radius: 6px; }
 .legend { margin: 8px 0 0; font-size: 11px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin: 0 4px 0 8px; }
@@ -231,6 +227,51 @@ ul { margin: 0; padding-left: 20px; }
 #remediate-modal { max-width: min(480px, calc(100vw - 24px)); padding: 24px; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow-wrap: anywhere; }
 #remediate-modal::backdrop { background: #000a; }
 .modal-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+/* GROUP 4: 300px rail and local swarm console. */
+.right-rail { display: flex; flex-direction: column; gap: 12px; align-self: stretch; }
+.rail-heading { display: flex; align-items: start; justify-content: space-between; gap: 6px; color: var(--dim); font-size: 9px; letter-spacing: .06em; }
+.rail-heading h2 { margin: 0; font: inherit; }
+#latency-anomaly { flex-shrink: 0; font-size: 9px; letter-spacing: 0; }
+.latency-reading { display: flex; align-items: baseline; gap: 6px; margin: 8px 0 0; }
+.latency-reading strong { font-size: 36px; line-height: 1.2; font-weight: 700; }
+.latency-reading > span { font-size: 11px; }
+#latency-chart { margin-top: 12px; }
+#latency-chart svg { display: block; width: 100%; height: 90px; overflow: visible; }
+.chart-grid { stroke: var(--border); stroke-width: .5; opacity: .5; }
+.latency-area { fill: #ef44441a; }
+.latency-line { fill: none; stroke: var(--red); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.latency-labels { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 9px; color: var(--muted); }
+#latency-empty { display: flex; align-items: center; min-height: 90px; margin: 8px 0 0; font-size: 10px; }
+.rail-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.rail-stat { padding: 12px; overflow-wrap: anywhere; }
+.rail-stat .stat-label { min-height: 26px; font-weight: 400; font-size: 8px; }
+.rail-stat .metric-value { display: block; font-size: 26px; }
+.rail-stat-detail { margin: 6px 0 0; font-size: 10px; line-height: 1.4; }
+.agent-bus { position: sticky; top: 16px; display: flex; flex-direction: column; min-height: 420px; height: calc(100vh - 32px); max-height: 600px; padding: 0; overflow: hidden; }
+.bus-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border); }
+.bus-heading h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; line-height: 1.5; }
+.bus-heading .icon { width: 14px; height: 14px; color: var(--cyan); }
+.bus-live { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--dim); }
+.bus-live.live { background: var(--green); box-shadow: 0 0 6px #22c55e66; }
+.bus-messages { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; list-style: none; margin: 0; padding: 12px; scrollbar-width: thin; font: 10px/1.6 var(--font-mono); }
+.bus-message { border-left: 2px solid currentColor; margin: 0 0 16px; padding-left: 8px; overflow-wrap: anywhere; color: var(--dim); }
+.bus-message:last-child { margin-bottom: 0; }
+.bus-message.finding, .bus-message.response { color: var(--cyan); }
+.bus-message.query { color: var(--amber); }
+.bus-message.error { color: var(--red); }
+.bus-message-heading { display: flex; align-items: start; justify-content: space-between; gap: 6px; margin-bottom: 6px; color: var(--muted); font-size: 8px; }
+.bus-message-heading > span { min-width: 0; }
+.bus-message-heading time { flex-shrink: 0; }
+.bus-message p { margin: 0; white-space: pre-wrap; }
+#bus-empty { padding: 12px; margin: 0; font-size: 10px; }
+.bus-console { display: grid; grid-template-columns: minmax(0, 1fr) 22px; gap: 4px; margin: 0 12px 12px; padding-top: 8px; border-top: 1px solid var(--border); }
+.bus-console label { grid-column: 1 / -1; color: var(--cyan); font-size: 10px; }
+.bus-console input { width: 100%; min-width: 0; padding: 6px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--text); font: 10px var(--font-mono); }
+.bus-console input::placeholder { color: var(--muted); }
+.bus-console .icon-button { width: 22px; height: 28px; color: var(--cyan); }
+@media (max-width: 1199px) {
+  .agent-bus { position: static; height: 480px; max-height: none; }
+}
 @media (min-width: 1200px) and (max-width: 1399px) {
   .action-row { grid-template-columns: 22px minmax(0, 1fr); }
   .action-row .button { grid-column: 2; justify-self: end; max-width: none; }
@@ -303,7 +344,7 @@ ul { margin: 0; padding-left: 20px; }
   :root { color-scheme: light; --bg: #fff; --panel: #fff; --panel-2: #f5f7fa; --border: #b6bfcc; --text: #111827; --muted: #374151; --dim: #4b5563; --cyan: #00677b; --green: #146c35; --amber: #875500; --red: #b91c1c; }
   @page { margin: 14mm; }
   body { display: block; min-height: auto; background: #fff; font-size: 11px; }
-  .top-bar, .sidebar, .hero-actions, #pipeline, #run-controls, #legacy-timeline, #legacy-topology,
+  .top-bar, .sidebar, .hero-actions, #pipeline, #run-controls, #legacy-topology,
   #right-rail, #fix, #fixresult, #run-modal-root, #remediate-modal-root, [data-view-panel]:not(#view-console) { display: none !important; }
   main { width: 100%; max-width: none; padding: 0; margin: 0; }
   #view-console { display: grid !important; }

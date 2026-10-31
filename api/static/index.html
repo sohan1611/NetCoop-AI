@@ -24,6 +24,8 @@
   <symbol id="icon-workflow" viewBox="0 0 24 24"><path d="M3 7h5l8 10h5M3 17h5l8-10h5m-3-3 3 3-3 3m0 4 3 3-3 3"/></symbol>
   <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
   <symbol id="icon-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+  <symbol id="icon-messages" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2ZM7 7h10M7 11h6"/></symbol>
+  <symbol id="icon-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z M22 2 11 13"/></symbol>
 </svg>
 <header id="top-bar" class="top-bar">
   <button id="sidebar-toggle" class="icon-button hamburger" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false"><svg class="icon"><use href="#icon-menu"/></svg></button>
@@ -121,8 +123,24 @@
           </div>
         </section>
       </div>
-      <!-- GROUP 4: latency trend, stat tiles and agent bus. -->
-      <aside id="right-rail" class="right-rail" aria-label="Diagnostic metrics"><div id="latency-trend"></div><div id="rail-stats"></div><div id="agent-bus"></div></aside>
+      <aside id="right-rail" class="right-rail" aria-label="Diagnostic metrics">
+        <section id="latency-trend" class="card latency-card" aria-labelledby="latency-title">
+          <header class="rail-heading mono"><h2 id="latency-title">CAMPUS LATENCY TREND (MS)</h2><span id="latency-anomaly">—</span></header>
+          <p class="latency-reading"><strong id="latency-value">—</strong><span class="mono muted">ms</span></p>
+          <div id="latency-chart"></div><p id="latency-empty" class="mono muted">No latency samples available.</p>
+          <div id="latency-labels" class="mono latency-labels"><span id="latency-first">—</span><span id="latency-last">—</span></div>
+        </section>
+        <section id="rail-stats" class="rail-stats" aria-label="Loss and consensus">
+          <article class="card rail-stat"><h2 class="mono stat-label">PACKET LOSS RATE</h2><strong id="packet-loss" class="metric-value">—</strong><p id="packet-loss-device" class="rail-stat-detail">—</p></article>
+          <article class="card rail-stat"><h2 class="mono stat-label">SWARM CONSENSUS</h2><strong id="rail-confidence" class="metric-value cyan">—</strong><p id="rail-accord" class="rail-stat-detail cyan">—</p></article>
+        </section>
+        <section id="agent-bus" class="card agent-bus" tabindex="-1" aria-labelledby="bus-title">
+          <header class="bus-heading"><h2 id="bus-title"><svg class="icon" aria-hidden="true"><use href="#icon-messages"/></svg>Agent Inter-Communication Bus</h2><span id="bus-live" class="bus-live" role="img" aria-label="Bus idle"></span></header>
+          <ol id="bus-messages" class="bus-messages" role="log" aria-live="polite" aria-relevant="additions" aria-label="Run messages and local commands"></ol>
+          <p id="bus-empty" class="mono muted">No run messages yet.</p>
+          <form id="bus-console" class="bus-console"><label for="bus-input" class="mono">ai-orchestrator &gt;</label><input id="bus-input" type="text" autocomplete="off" spellcheck="false" placeholder="query swarm or issue cl…" aria-label="Local swarm command"><button id="bus-send" type="submit" class="icon-button" aria-label="Send local command"><svg class="icon" aria-hidden="true"><use href="#icon-send"/></svg></button></form>
+        </section>
+      </aside>
     </div>
     <!-- GROUP 5: legacy controls and views remain reachable until replaced. -->
     <div id="legacy-workflow" class="report-column">
@@ -133,15 +151,14 @@
           <label>Fail an agent (degrade test)<select id="fail"><option value="">none</option><option>performance</option><option>infrastructure</option><option>connectivity</option><option>correlator</option></select></label>
           <button id="run">Run diagnosis</button><div id="status" class="muted" role="status"></div>
         </section>
-        <section id="legacy-timeline" class="card" tabindex="-1"><h2>Agent messages</h2><ol id="timeline" class="timeline"><li class="muted">No run yet.</li></ol></section>
         <section id="legacy-topology" class="card" tabindex="-1"><h2>Topology</h2><div id="topo"></div><p class="muted legend"><span class="dot bad"></span> affected <span class="dot ok"></span> other</p></section>
     </div>
   </div>
   <!-- GROUP 5: full view content and run/remediation modals. -->
   <section id="view-topology" class="view card" data-view-panel="topology" hidden><h2>Live Topology</h2><p class="muted">The current topology is available in the console.</p><button class="button outline" data-view-target="console" data-focus="legacy-topology">Open console topology</button></section>
   <section id="view-incidents" class="view card" data-view-panel="incidents" hidden><h2>Correlated Incidents</h2><p class="muted">Incident view pending.</p></section>
-  <section id="view-pipeline" class="view card" data-view-panel="pipeline" hidden><h2>Agent Pipeline</h2><p class="muted">The current agent timeline is available in the console.</p><button class="button outline" data-view-target="console" data-focus="legacy-timeline">Open agent timeline</button></section>
-  <section id="view-telemetry" class="view card" data-view-panel="telemetry" hidden><h2>Telemetry Stream</h2><p class="muted">The current message stream is available in the console.</p><button class="button outline" data-view-target="console" data-focus="legacy-timeline">Open message stream</button></section>
+  <section id="view-pipeline" class="view card" data-view-panel="pipeline" hidden><h2>Agent Pipeline</h2><p class="muted">The current agent bus is available in the console.</p><button class="button outline" data-view-target="console" data-focus="agent-bus">Open agent bus</button></section>
+  <section id="view-telemetry" class="view card" data-view-panel="telemetry" hidden><h2>Telemetry Stream</h2><p class="muted">The current message stream is available in the console.</p><button class="button outline" data-view-target="console" data-focus="agent-bus">Open message stream</button></section>
   <section id="view-devices" class="view card" data-view-panel="devices" hidden><h2>Device Mesh</h2><p class="muted">Device view pending.</p></section>
   <section id="view-playbooks" class="view card" data-view-panel="playbooks" hidden><h2>Automated Playbooks</h2><p class="muted">Playbook view pending.</p></section>
   <section id="view-terminal" class="view card" data-view-panel="terminal" hidden><h2>CLI Terminal</h2><p class="muted">Terminal view pending.</p></section>

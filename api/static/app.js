@@ -2,7 +2,7 @@ const $ = (id) => document.getElementById(id);
 // All API data lives here; renderers never fetch. cy/source are disposable UI resources.
 const state = {
   runId: null, health: null, runs: null, report: null, details: null,
-  messages: [], topology: null, view: 'console', search: '', acknowledged: readAcknowledged(),
+  messages: [], consoleMessages: [], topology: null, view: 'console', search: '', acknowledged: readAcknowledged(),
   running: false, scenariosReady: false, remediation: null, remediating: false,
 };
 let cy = null, source = null;
@@ -167,12 +167,14 @@ function setView(view) {
   if (view === 'console' && cy) { cy.resize(); cy.fit(); }
 }
 function renderSearch() {
-  // Later bus/telemetry renderers can use state.search or mark rows data-searchable.
-  document.querySelectorAll('#timeline > li, #evidence > li, [data-searchable]').forEach((row) => {
+  document.querySelectorAll('#evidence > li, [data-searchable]').forEach((row) => {
     row.hidden = !row.textContent.toLowerCase().includes(state.search);
   });
+  const visible = [...$('bus-messages').children].some((row) => !row.hidden);
+  $('bus-empty').hidden = visible;
+  $('bus-empty').textContent = state.search ? 'No matching messages.' : state.running ? 'Waiting for run messages…' : 'No run messages yet.';
 }
-function renderShell() { renderTopBar(); renderSidebar(); renderHero(); renderPipeline(); renderReport(); }
+function renderShell() { renderTopBar(); renderSidebar(); renderHero(); renderPipeline(); renderReport(); renderRightRail(); renderBus(); }
 
 function el(tag, text, cls) {
   const e = document.createElement(tag);
@@ -235,26 +237,22 @@ function subscribeRun() {
 function summarize(msg) {
   const p = msg.payload || {};
   if (p.message) return p.message;
+  if (p.action) return [p.action, p.reason].filter(Boolean).join(': ');
   if (p.query_type || p.type) return p.query_type || p.type;
   if (p.diagnosis && p.diagnosis.cause) return 'diagnosis: ' + p.diagnosis.cause;
   if (p.report) return 'report ready';
-  if (p.hypotheses && p.hypotheses.length) return 'top hypothesis: ' + (p.hypotheses[0].cause || p.hypotheses[0].name || '');
+  if (p.hypotheses && p.hypotheses.length) {
+    const top = [...p.hypotheses].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
+    return ['top hypothesis: ' + (top.cause || top.name || '—'), ...(p.notes || []).slice(0, 1)].join('; ');
+  }
+  if (p.notes?.length) return p.notes.join('; ');
   if (p.data_quality) return 'data quality ' + p.data_quality.score;
   if (p.raw !== undefined) return 'raw telemetry submitted';
   return Object.keys(p).slice(0, 4).join(', ');
 }
 function addMessage(msg) {
   state.messages.push(msg);
-  renderHero(); renderPipeline(); renderTimeline(msg);
-}
-function renderTimeline(msg) {
-  const tl = $('timeline');
-  if (tl.firstChild && tl.firstChild.classList.contains('muted')) tl.replaceChildren();
-  const li = el('li');
-  li.append(el('span', msg.type, 'tag ' + msg.type), el('b', msg.sender + ' → ' + msg.recipient + ' '),
-            el('span', summarize(msg), 'muted'));
-  tl.append(li); tl.scrollTop = tl.scrollHeight;
-  renderSearch();
+  renderHero(); renderPipeline(); renderRightRail(); renderBus();
 }
 
 function drawTopology() {
@@ -296,6 +294,154 @@ function evidenceTone(e) {
   return /critical/i.test(e.interpretation || '') ? 'alert' : /warning/i.test(e.interpretation || '') ? 'flagged' : '';
 }
 function empty(container, message) { container.append(el('p', message, 'muted empty-state')); }
+// GROUP 4: API projections for the rail; local commands never enter agent findings.
+function runMessages() { return state.messages.length ? state.messages : state.details?.messages || []; }
+function findingPayload(name) {
+  return runMessages().findLast((m) => m.type === 'FINDING' && m.sender === name)?.payload || {};
+}
+function clockLabel(stamp, milliseconds = false) {
+  const time = Date.parse(stamp);
+  return Number.isFinite(time) ? new Date(time).toISOString().slice(11, milliseconds ? 23 : 19) : '—';
+}
+function svgElement(tag, attrs) {
+  const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, String(value)));
+  return node;
+}
+function renderLatency() {
+  const primary = state.report?.affected_devices?.[0] || findingPayload('correlator').diagnosis?.affected_devices?.[0];
+  const liveSeries = (findingPayload('normalizer').telemetry?.samples || [])
+    .filter((s) => primary && s.device_id === primary).map((s) => ({ t: s.timestamp, value: s.latency_ms }));
+  const series = (state.details?.latency_series ?? liveSeries)
+    .filter((p) => Number.isFinite(p.value) && Number.isFinite(Date.parse(p.t)))
+    .slice().sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
+  const latest = series.at(-1)?.value;
+  const evidence = state.report?.supporting_evidence || findingPayload('correlator').diagnosis?.evidence || [];
+  const baseline = evidence.find((e) => e.metric === 'latency_ms' && e.device_id === primary && Number.isFinite(e.baseline))?.baseline;
+  const anomaly = Number.isFinite(latest) && Number.isFinite(baseline) && baseline > 0 ? (latest - baseline) / baseline * 100 : null;
+  $('latency-value').textContent = display(latest);
+  $('latency-anomaly').textContent = anomaly === null ? '—' : (anomaly >= 0 ? '+' : '') + Math.round(anomaly) + '% Anomaly';
+  $('latency-anomaly').className = anomaly !== null && anomaly > 0 ? 'alert' : 'muted';
+  $('latency-first').textContent = clockLabel(series[0]?.t);
+  $('latency-last').textContent = series.length > 1 ? clockLabel(series.at(-1).t) : '—';
+  $('latency-labels').hidden = series.length < 2;
+  $('latency-empty').hidden = series.length >= 2;
+  $('latency-empty').textContent = series.length === 1 ? 'single sample' : 'No latency samples available.';
+  const chart = $('latency-chart'); chart.replaceChildren(); chart.hidden = series.length < 2;
+  if (series.length < 2) return;
+  const svg = svgElement('svg', { viewBox: '0 0 266 90', role: 'img', 'aria-label': 'Latency trend for ' + display(primary) + ' (ms, UTC)' });
+  const title = svgElement('title', {}); title.textContent = 'Latency (ms) · ' + display(primary); svg.append(title);
+  [12, 36, 60, 84].forEach((y) => svg.append(svgElement('line', { x1: 0, y1: y, x2: 266, y2: y, class: 'chart-grid' })));
+  [0, 66.5, 133, 199.5, 266].forEach((x) => svg.append(svgElement('line', { x1: x, y1: 6, x2: x, y2: 84, class: 'chart-grid' })));
+  const max = Math.max(1, ...series.map((p) => p.value));
+  const firstTime = Date.parse(series[0].t), span = Date.parse(series.at(-1).t) - firstTime;
+  const points = series.map((p, i) => [span > 0 ? (Date.parse(p.t) - firstTime) / span * 266 : i / (series.length - 1) * 266,
+    84 - p.value / max * 72]);
+  const path = points.map(([x, y], i) => (i ? 'L' : 'M') + x.toFixed(2) + ',' + y.toFixed(2)).join(' ');
+  svg.append(svgElement('path', { d: path + ' L266,84 L0,84 Z', class: 'latency-area' }),
+    svgElement('path', { d: path, class: 'latency-line' }));
+  chart.append(svg);
+}
+function renderRailStats() {
+  const evidence = state.report?.supporting_evidence || [];
+  const candidates = [
+    ...(findingPayload('normalizer').telemetry?.samples || []).map((s) => ({ ...s, value: s.packet_loss_pct })),
+    ...(state.details?.mappings || []).filter((m) => m.metric === 'packet_loss_pct'),
+    ...(state.details?.devices || []).filter((d) => d.worst_metric === 'packet_loss_pct').map((d) => ({ ...d, value: d.worst_value })),
+    ...runMessages().flatMap((m) => m.payload?.evidence || []).filter((e) => e.metric === 'packet_loss_pct'),
+    ...evidence.filter((e) => e.metric === 'packet_loss_pct'),
+  ].filter((e) => Number.isFinite(e.value));
+  const worst = candidates.reduce((best, e) => !best || e.value > best.value ? e : best, null);
+  const critical = worst && candidates.some((e) => e.device_id === worst.device_id && e.value === worst.value &&
+    (e.severity === 'critical' || /(?:>=|<=) critical\b/.test(e.interpretation || '')));
+  $('packet-loss').textContent = worst ? worst.value + '%' : '—';
+  $('packet-loss').className = 'metric-value' + (critical ? ' alert' : '');
+  $('packet-loss-device').textContent = display(worst?.device_id);
+  $('rail-confidence').textContent = percent(state.report?.confidence ?? findingPayload('correlator').diagnosis?.confidence);
+  const consensus = state.details?.consensus;
+  $('rail-accord').textContent = consensus && Number.isFinite(consensus.in_accord) && Number.isFinite(consensus.total) ?
+    consensus.in_accord + '/' + consensus.total + ' Agents in Accord' : '—';
+}
+function renderRightRail() { renderLatency(); renderRailStats(); }
+const BUS_TYPES = new Set(['TASK', 'FINDING', 'QUERY', 'RESPONSE', 'ERROR']);
+let renderedBusMessages = [];
+function renderBus() {
+  const list = $('bus-messages');
+  const messages = [...runMessages(), ...state.consoleMessages]
+    .sort((a, b) => (Date.parse(a.timestamp) || 0) - (Date.parse(b.timestamp) || 0));
+  // Keep existing log nodes so aria-live only announces newly arrived messages.
+  let shared = 0;
+  while (shared < messages.length && messages[shared] === renderedBusMessages[shared]) shared++;
+  while (list.children.length > shared) list.lastChild.remove();
+  messages.slice(shared).forEach((msg) => {
+    const row = el('li', undefined, 'bus-message ' + (BUS_TYPES.has(msg.type) ? msg.type.toLowerCase() : 'task'));
+    row.dataset.searchable = '';
+    const heading = el('div', undefined, 'bus-message-heading');
+    const time = el('time', clockLabel(msg.timestamp, true));
+    if (Number.isFinite(Date.parse(msg.timestamp))) time.dateTime = msg.timestamp;
+    time.title = display(msg.timestamp) + ' (UTC)';
+    heading.append(el('span', '[' + display(msg.sender) + ' → ' + display(msg.recipient) + ']'), time);
+    row.append(heading, el('p', '“' + (summarize(msg) || '—') + '”')); list.append(row);
+  });
+  const changed = messages.length !== renderedBusMessages.length || shared !== messages.length;
+  renderedBusMessages = messages;
+  $('bus-live').classList.toggle('live', state.running);
+  $('bus-live').setAttribute('aria-label', state.running ? 'Bus live' : 'Bus idle');
+  renderSearch();
+  if (changed) list.scrollTop = list.scrollHeight;
+}
+function consoleMessage(sender, recipient, text, type = 'RESPONSE') {
+  state.consoleMessages.push({ sender, recipient, type, timestamp: new Date().toISOString(), payload: { message: text } });
+  renderBus();
+}
+async function executeCommand(command) {
+  consoleMessage('You', 'Orchestrator', command, 'QUERY');
+  const [verb, ...args] = command.split(/\s+/), argument = args.join(' ');
+  const reply = (text, type) => consoleMessage('Orchestrator', 'You', text, type);
+  try {
+    switch (verb.toLowerCase()) {
+      case 'help':
+        reply('Local commands: help; run <scenario>; fail <agent> (next run; fail none clears); evidence; alts; remediate (simulated); export json.'); break;
+      case 'run': {
+        if (state.running) { reply('A diagnostic run is already running.'); break; }
+        if (!state.scenariosReady) { reply('Scenarios are not available yet.'); break; }
+        const option = [...$('scenario').options].find((o) => o.value === argument);
+        if (!option) { reply('Use run <scenario>. Available: ' + [...$('scenario').options].map((o) => o.value).join(', ')); break; }
+        $('scenario').value = option.value; $('file').value = '';
+        await run(); reply($('status').textContent, state.runId ? 'RESPONSE' : 'ERROR'); break;
+      }
+      case 'fail': {
+        const option = [...$('fail').options].find((o) => o.value === (argument === 'none' ? '' : argument));
+        if (!argument || !option) { reply('Use fail <agent>. Available: ' + [...$('fail').options].map((o) => o.value || 'none').join(', ')); break; }
+        $('fail').value = option.value;
+        reply(option.value ? 'Fault injection selected for next run: ' + option.value : 'Fault injection cleared for next run.'); break;
+      }
+      case 'evidence': {
+        const evidence = state.report?.supporting_evidence;
+        reply(evidence?.length ? evidence.map((e) => display(e.device_id) + ': ' + metricText(e.metric, e.value, e.unit) + ' — ' + display(e.interpretation)).join('\n') : 'No supporting evidence available.'); break;
+      }
+      case 'alts': {
+        const alternatives = state.details?.alternatives;
+        reply(alternatives?.length ? alternatives.map((a) => display(a.cause) + ': ' + percent(a.confidence) + ' — ' + display(a.rationale)).join('\n') :
+          state.report?.alternative_causes?.join('\n') || 'No alternative explanations reported.'); break;
+      }
+      case 'remediate':
+        if (!canRemediate()) { reply('Run a supported diagnosis before simulated remediation.'); break; }
+        window.openRemediateModal(); reply('Simulated remediation confirmation opened.'); break;
+      case 'export':
+        if (argument !== 'json') { reply('Use export json.'); break; }
+        if (!state.report || state.running) { reply('No completed report available to export.'); break; }
+        await downloadReport('json'); reply('JSON report downloaded for run ' + state.runId + '.'); break;
+      default: reply('Unknown local command. Type help for available commands.');
+    }
+  } catch (err) { reply('Command error: ' + err.message, 'ERROR'); }
+}
+$('bus-console').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const command = $('bus-input').value.trim();
+  if (!command) return;
+  $('bus-input').value = ''; void executeCommand(command);
+});
 function renderReport() {
   const r = state.report, d = state.details;
   $('report').hidden = false;
@@ -346,8 +492,9 @@ function renderAffectedDevices() {
 function renderEvidence() {
   const grid = $('evidence'), rows = state.report?.supporting_evidence || [];
   grid.replaceChildren();
-  $('sample-window').textContent = Number.isFinite(state.details?.window?.seconds) ?
-    'SAMPLED OVER ' + state.details.window.seconds + ' SECONDS' : 'SAMPLED OVER — SECONDS';
+  const seconds = state.details?.window?.seconds;
+  $('sample-window').textContent = Number.isFinite(seconds) && seconds > 0 ?
+    'SAMPLED OVER ' + seconds + ' SECONDS' : seconds === 0 ? 'SINGLE SAMPLE' : '—';
   rows.slice(0, 5).forEach((e) => {
     const tile = el('article', undefined, 'evidence-tile');
     tile.dataset.searchable = '';
@@ -453,7 +600,6 @@ async function run() {
   if (cy) { cy.destroy(); cy = null; }
   $('topo').textContent = '';
   setView('console'); renderShell();
-  $('timeline').replaceChildren(el('li', 'Waiting for messages…', 'muted'));
   if (source) source.close();
   try {
     const body = { fail_agent: $('fail').value || null };
