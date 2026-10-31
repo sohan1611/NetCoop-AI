@@ -156,6 +156,7 @@ def _quality_details(
 ) -> tuple[float, list[str], dict[str, Any] | None]:
     scores: list[float] = []
     issues: list[str] = []
+    seen_issues: set[str] = set()
     quality_payload: dict[str, Any] | None = None
     for finding in findings.values():
         quality = finding.get("data_quality")
@@ -167,7 +168,8 @@ def _quality_details(
         raw_issues = quality.get("issues")
         if isinstance(raw_issues, list):
             for issue in raw_issues:
-                if isinstance(issue, str) and issue not in issues:
+                if isinstance(issue, str) and issue not in seen_issues:
+                    seen_issues.add(issue)
                     issues.append(issue)
         if quality_payload is None:
             quality_payload = quality

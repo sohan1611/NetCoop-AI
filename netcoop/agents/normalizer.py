@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -263,7 +264,14 @@ def _convert_value(value: Any, target: str, factor: float,
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             tracker.add("wrong_type", f"wrong type for {path}; expected a number")
             return None
-        return value * factor
+        try:
+            converted = value * factor
+        except OverflowError:  # int too large for a float
+            converted = math.inf
+        if not math.isfinite(converted):
+            tracker.add("wrong_type", f"non-finite number at {path}; value dropped")
+            return None
+        return converted
     if value is not None and not isinstance(value, str):
         tracker.add("wrong_type", f"wrong type for {path}; expected a string")
         return None

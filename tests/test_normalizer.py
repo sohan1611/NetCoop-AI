@@ -266,3 +266,16 @@ def test_error_messages_are_generic():
     assert "nesting too deep" in deep.error and "Stack overflow" not in deep.error
     assert "number too large" in big.error and "set_int_max_str_digits" not in big.error
     assert bad.error == "invalid JSON telemetry"
+
+
+@pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "1e999", '"1e999"', "1" + "0" * 400])
+def test_non_finite_numbers_are_dropped_as_wrong_type(bad):
+    result = normalize('[{"device_id":"X","timestamp":"2026-10-31T09:00:00Z",'
+                       '"metrics":{"latency_ms":' + bad + ',"cpu_utilization_pct":20}}]')
+    if result.error is not None:  # absurdly long int literals hit the int-digit limit instead
+        assert "number too large" in result.error
+        return
+    sample = result.telemetry["samples"][0]
+    assert "latency_ms" not in sample
+    assert any("non-finite" in issue for issue in result.data_quality.issues)
+    assert result.telemetry["devices"][0]["cpu_pct"] == 20

@@ -104,3 +104,30 @@ def test_agreement_weights_votes_by_domain_relevance():
     assert _agreement_factor("latency_degradation", tops) > _agreement_factor("congestion", tops)
     assert _agreement_factor("latency_degradation", {"performance": "latency_degradation"}) == 1.0
     assert _agreement_factor("normal", {}) == 0.7
+
+
+def test_large_healthy_input_is_normal_and_fast(tmp_path):
+    import time
+
+    from data.generator.organizer_generator import generate_telemetry
+
+    records = []
+    for index in range(20_000):
+        record = generate_telemetry("normal", seed=index % 50)
+        record["device_id"] = f"SW{index}"
+        records.append(record)
+    started = time.perf_counter()
+    _, _, cause = _run(tmp_path, json.dumps(records))
+    assert cause == "normal"
+    assert time.perf_counter() - started < 5.0
+
+
+def test_quality_details_scales_linearly_with_many_issues():
+    import time
+
+    from netcoop.agents.correlator import _quality_details
+
+    issues = [f"missing field organizer[{i}].timestamp" for i in range(50_000)]
+    started = time.perf_counter()
+    _quality_details({"normalizer": {"data_quality": {"score": 0.5, "issues": issues}}})
+    assert time.perf_counter() - started < 1.0
