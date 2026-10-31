@@ -17,9 +17,9 @@ Every task: add/extend pytest tests in tests/ for what it builds; `pytest -q` mu
 | T10 | DONE | medium | `llm.py` Gemini client (timeout 8s, disk cache, returns None on any failure) ; normalizer uses it only for unknown fields (with confidence, logged); reporter adds `narrative` | with no key everything still passes |
 | T11 | DONE | medium | `scripts/evaluate.py` (table: scenario, expected, got, confidence, pass) + full pytest suite | ≥12/13 pass |
 | T12 | DONE | medium | `api/server.py` (FastAPI: list scenarios, upload, run, SSE stream of bus messages, report, remediate) + `api/static/` single page: scenario picker/upload, live agent message timeline, topology (cytoscape.js from CDN) with affected nodes highlighted, report card, "Approve simulated fix" button | manual run of 3 scenarios in browser |
-| T13 | TODO | medium | `mcp_server.py` (stretch): tools `list_scenarios`, `get_telemetry`, `diagnose` | MCP inspector lists tools |
-| T14 | TODO | low | README.md: problem, architecture diagram (mermaid), agents, protocol, confidence method, error handling, setup, run, tests, scenarios, limitations, third-party acknowledgements | fresh clone setup works |
-| T15 | TODO | — (Claude C5) | `docs/DEMO_SCRIPT.md`: 3–5 min video script — dashboard run of congestion → live agent messages → QUERY loop → report; interop/malformed input handled; `--fail-agent` degrade; simulated fix + verify; `evaluate.py` table | script fits ≤5 min |
+| T13 | DONE | medium | `mcp_server.py` (stretch): tools `list_scenarios`, `get_telemetry`, `diagnose` | MCP inspector lists tools |
+| T14 | DONE | low | README.md: problem, architecture diagram (mermaid), agents, protocol, confidence method, error handling, setup, run, tests, scenarios, limitations, third-party acknowledgements | fresh clone setup works |
+| T15 | DONE | — (Claude C5) | `docs/DEMO_SCRIPT.md`: 3–5 min video script — dashboard run of congestion → live agent messages → QUERY loop → report; interop/malformed input handled; `--fail-agent` degrade; simulated fix + verify; `evaluate.py` table | script fits ≤5 min |
 
 ## Canonical telemetry (input after normalization)
 ```json
@@ -43,3 +43,4 @@ Never change the canonical format; adapt in the normalizer.
 - S1 (Opus/high): problem read, PLAN + TASKS written. Next: T1. Organizer notebook read; format rules added above.
 - S2 (Sonnet/medium): T1–T9 DONE via Codex gpt-6.1-sol (T1–T7 ran at xhigh by mistake; T8–T9 low). M1 CLI cleared: `evaluate` 16/16, 85 tests. Next: T10 (llm.py, medium), T11 (evaluate script + suite, medium), T12 (API + dashboard, medium). Known nit: duplicate latency_ms evidence rows in report (dedupe in T11/T12). Codex invoke: `-m gpt-6.1-sol -c model_reasoning_effort=<per Effort col>`, run_in_background.
 - S2 cont.: T10, T11 DONE via Codex (reviewed). Codex quota ran out during T12 (resets 5:24 PM); T12 written by Claude: `api/server.py` + `api/static/`, driven in browser (congestion, dns_failure, malformed_json, --fail-agent, simulated fix verified). Fixed T2 bug: null optional metrics were flagged wrong_type (data_quality 0.04 -> 1.0). M2 = T12. Next: T13 (MCP, stretch), T14 README, T15 demo script. Run UI: `uvicorn api.server:app`.
+- S3 (Sonnet): T13 (MCP via `mcp` 2.x `MCPServer`, optional dep `.[mcp]`), T14 README, T15 demo script all DONE, written by Claude (Codex down). 125 tests, evaluate 16/16. Next: record demo video, final repo check/submission.

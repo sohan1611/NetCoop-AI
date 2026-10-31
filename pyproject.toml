@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+mcp = ["mcp>=2"]
 
 [tool.setuptools.packages.find]
 include = ["netcoop*", "api*"]
