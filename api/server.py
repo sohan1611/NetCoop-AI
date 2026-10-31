@@ -77,8 +77,10 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
         request.state.session = session or uuid4().hex
         response = await call_next(request)
         if new_session:
+            # Render terminates TLS, so the app itself sees plain http.
+            https = request.headers.get('x-forwarded-proto', request.url.scheme) == 'https'
             response.set_cookie('nc_session', request.state.session, httponly=True,
-                                samesite='lax', path='/')
+                                samesite='lax', path='/', secure=https)
         for name, value in SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)
         return response

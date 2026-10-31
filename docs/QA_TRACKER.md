@@ -79,6 +79,7 @@ Priority = ours after verification (audit priority in brackets when changed).
 | NC-043 | P2 | S17: T25 `MAX_UPLOAD_FILES = 20` is global — 20 uploads/h from anyone → 413 for every visitor (judges) | Tested (T28: tests/test_qa_t28.py; S17 rerun) |
 | NC-044 | P3 | S17: "evidence from unrelated devices/times" shown for single-device fixtures 02/11 (real reason: util missing/low); normal's "warning-grade devices" limitation leaked into every report (congestion 0.94) | Tested (T28: tests/test_qa_t28.py; S17 rerun) |
 | NC-045 | P3 | S17: T28 deleted the upload before `admit()`; a 429 then lost the user's file | Tested (T29: tests/test_qa_t29.py; S17 browser: reused upload_id → 404 after run) |
+| NC-046 | P3 | S17 live check: `nc_session` cookie set without `Secure` on the HTTPS deployment (Render terminates TLS, app saw http) | Tested (tests/test_qa_t29.py::test_nc046…; live re-check after deploy) |
 
 ### Independent re-audit of bc123e9 (docs/qa/NetCoop_AI_Reaudit_Oct31.md, local only) — verified in S17 on a clean checkout
 
@@ -133,3 +134,7 @@ T25 status: DONE. tests/test_api.py covers two-session isolation (list/stream/re
 T26 status: DONE. Browser-checked (375 px no overflow, no console errors besides a self-inflicted 429 from rapid test runs): fixture 08 upload chart ends 500 ms, normal not CRIT/Healthy, insufficient_data = Unknown/Unclassified, Acknowledge All then new run stays unacknowledged, fail-agent sent once then cleared. pytest 242 passed, evaluate 16/16. Not browser-tested: SSE retry/poll (NC-019) and samples pagination (NC-022) beyond code/test review.
 
 T27 status: DONE. All 117 matrix checks executed (Result column filled, 117/117 Pass after NC-034..NC-041 fixes); every tracker row is Tested or Rejected. pytest 247 passed, evaluate 16/16, hostile_inputs/stress_test no CRASH. Not covered: real print dialog render, screen reader, light-theme contrast (no light theme), live Render/Vercel deployment (local build only).
+
+## Live deployment check (S17, 2026-10-31)
+
+Vercel static = T29 (upload notice, "Normal with warnings", RUN ID). Render API = T29: fixtures 14/13 via Vercel → insufficient_evidence 0.299 / 0.203 (identical to local). Two cookie jars through the Vercel rewrite: session B gets `[]` and 404 on report/stream/details/report.md of A's run; both sources → 422. Browser on netcoop-ai.vercel.app: congestion 0.942, SSE 12 messages through Vercel, hero Critical / P1 CRIT, no console errors. Found NC-046 (cookie not Secure).

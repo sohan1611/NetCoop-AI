@@ -243,3 +243,12 @@ def test_rqa07_readme_describes_session_scoped_reopening():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "Reopen a run (works in the browser session that started it)" in readme
     assert "Share a run" not in readme
+
+
+@pytest.mark.parametrize("proto, secure", [("https", True), (None, False)])
+def test_nc046_session_cookie_secure_behind_tls_proxy(proto, secure, tmp_path):
+    client = TestClient(server.create_app(tmp_path))
+    headers = {"x-forwarded-proto": proto} if proto else {}
+    cookie = client.get("/api/health", headers=headers).headers["set-cookie"].lower()
+    assert "httponly" in cookie
+    assert ("secure" in cookie.split("; ")) is secure
