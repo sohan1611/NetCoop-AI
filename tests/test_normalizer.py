@@ -257,3 +257,12 @@ def test_wrapped_record_list_is_unwrapped(wrapper):
 def test_impossible_values_are_flagged(field, value):
     result = normalize({'device_id': 'SW1', 'timestamp': '2026-10-31T09:00:00Z', 'metrics': {field: value}})
     assert any('out-of-range' in issue for issue in result.data_quality.issues)
+
+
+def test_error_messages_are_generic():
+    deep = normalize("[" * 100000 + "]" * 100000)
+    big = normalize('{"device_id":"X","metrics":{"latency_ms":' + "9" * 5000 + "}}")
+    bad = normalize("{not json")
+    assert "nesting too deep" in deep.error and "Stack overflow" not in deep.error
+    assert "number too large" in big.error and "set_int_max_str_digits" not in big.error
+    assert bad.error == "invalid JSON telemetry"

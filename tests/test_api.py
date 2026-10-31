@@ -132,3 +132,37 @@ def test_old_runs_and_uploads_are_cleaned(tmp_path, monkeypatch):
         assert c.post('/api/run', json={'scenario': 'congestion'}).status_code == 200
     assert not old_run.exists() and not old_up.exists()
     assert fresh_up.exists() and (tmp_path / 'uploads').is_dir()
+
+
+# --- T17 V5-V7 ---------------------------------------------------------------
+def test_security_headers_and_sri(tmp_path):
+    c = _client(tmp_path)
+    res = c.get('/api/scenarios')
+    assert res.headers['x-content-type-options'] == 'nosniff'
+    assert res.headers['x-frame-options'] == 'DENY'
+    assert res.headers['referrer-policy'] == 'no-referrer'
+    assert "script-src 'self' https://cdnjs.cloudflare.com" in res.headers['content-security-policy']
+    page = c.get('/').text
+    assert 'integrity="sha512-' in page and 'crossorigin=' in page
+
+
+def test_labels_is_not_a_scenario(tmp_path):
+    c = _client(tmp_path)
+    assert c.get('/api/scenarios/labels').status_code == 400
+    assert c.post('/api/run', json={'scenario': 'labels'}).status_code == 400
+
+
+def test_api_errors_do_not_leak_exception_text(tmp_path):
+    c = _client(tmp_path)
+    cases = {'deep': '[' * 100000 + ']' * 100000,
+             'bigint': '{"device_id":"X","metrics":{"latency_ms":' + '9' * 5000 + '}}'}
+    for body in cases.values():
+        up = c.post('/api/upload', content=body.encode()).json()['upload_id']
+        run_id = c.post('/api/run', json={'upload_id': up}).json()['run_id']
+        text = json.dumps(c.get(f'/api/runs/{run_id}/report').json())
+        for leak in ('set_int_max_str_digits', 'Stack overflow', 'RecursionError', 'ValueError', 'Traceback'):
+            assert leak not in text
+    run_id = c.post('/api/run', json={'upload_id': up}).json()['run_id']
+    c.get(f'/api/runs/{run_id}/report')
+    detail = c.post(f'/api/runs/{run_id}/remediate').json()['detail']
+    assert detail.startswith('cannot remediate') and 'Error' not in detail

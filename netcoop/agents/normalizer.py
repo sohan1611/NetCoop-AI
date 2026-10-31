@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -14,6 +15,8 @@ from netcoop import llm
 from netcoop.agents.base import Agent
 from netcoop.protocol import DataQuality, Envelope, Finding, MsgType
 
+
+log = logging.getLogger(__name__)
 
 # Aliases apply only when the target belongs to the row being normalized.
 FIELD_ALIASES: dict[str, str] = {
@@ -685,10 +688,22 @@ def normalize(raw: str | bytes | dict | list, use_llm: bool = False) -> Normaliz
         _validate_rows(telemetry, tracker)
         return NormalizeResult(telemetry=telemetry, data_quality=tracker.model())
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        detail = getattr(exc, "msg", str(exc))
-        return _error_result(f"invalid JSON telemetry: {detail}", tracker)
+        log.info("invalid JSON telemetry: %s", getattr(exc, "msg", exc))
+        return _error_result("invalid JSON telemetry", tracker)
     except Exception as exc:  # Defensive boundary: normalization must never crash a run.
-        return _error_result(f"unable to normalize telemetry: {exc}", tracker)
+        log.warning("normalization failed: %s: %s", type(exc).__name__, exc)
+        return _error_result(f"unable to normalize telemetry: {_public_reason(exc)}", tracker)
+
+
+def _public_reason(exc: BaseException) -> str:
+    """Generic, non-leaky wording for an unexpected normalization failure (detail goes to logs)."""
+    if isinstance(exc, RecursionError):
+        return "JSON nesting too deep"
+    if isinstance(exc, ValueError) and "digits" in str(exc):
+        return "number too large"
+    if isinstance(exc, MemoryError):
+        return "input too large"
+    return "invalid input"
 
 
 class NormalizerAgent(Agent):
@@ -741,7 +756,8 @@ class NormalizerAgent(Agent):
                 payload=payload,
             )]
         except Exception as exc:  # Protocol boundary: handle must never raise.
-            return [self._error_envelope(envelope, f"normalization failed: {exc}")]
+            log.warning("normalizer handle failed: %s: %s", type(exc).__name__, exc)
+            return [self._error_envelope(envelope, f"normalization failed: {_public_reason(exc)}")]
 
     def _error_envelope(self, envelope: Envelope, reason: str) -> Envelope:
         return Envelope(

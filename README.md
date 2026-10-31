@@ -79,6 +79,14 @@ python scripts/evaluate.py
 ## Scenarios
 In `data/scenarios/` (regenerate with `python scripts/gen_scenarios.py`): normal, congestion, weak_wifi, interface_fault, device_overload, dns_failure, dhcp_failure, interop_renamed_fields_units, schema_v0_legacy, missing_sections, malformed_json, conflicting_evidence, insufficient_data, and the organizer-format files `org_normal`, `org_latency_spike`, `org_hardware_failure`. Expected causes are in `labels.json`.
 
+## Security & robustness
+- **Privacy:** runs and reports are readable by anyone who knows the run id. This is a demo deployment; do not upload real campus data.
+- **Resource limits:** at most 2 concurrent runs and 10 runs per minute per IP (HTTP 429 beyond that); uploads are capped at 5 MB (413, enforced while streaming); inputs over 25,000 devices or 50,000 samples return an `input too large` error. Runs execute in worker threads so the API and SSE streams stay responsive.
+- **Cleanup:** run and upload folders (and finished task records) older than `NETCOOP_RUN_TTL_S` seconds (default 3600) are deleted on each new run.
+- **Errors:** API responses use generic wording ("JSON nesting too deep", "number too large", "invalid JSON telemetry"); exception detail goes to server logs only.
+- **Headers:** `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and a CSP are set on every response; the cytoscape CDN script is pinned with an SRI hash.
+- **Single worker:** run state is held in process memory, so deploy with exactly one uvicorn worker (`uvicorn api.server:app --host 0.0.0.0 --port $PORT`, no `--workers`).
+
 ## Limitations
 Synthetic data only; remediation is simulated and touches nothing real; signatures are rule-based and tuned for the campus topology in the scenarios; Gemini output is advisory only.
 

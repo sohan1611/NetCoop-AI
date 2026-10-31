@@ -1,6 +1,7 @@
 """FastAPI server: run diagnoses, stream bus messages (SSE), serve the dashboard."""
 import asyncio
 import json
+import logging
 import os
 import re
 import shutil
@@ -21,7 +22,15 @@ from netcoop.state import RunState
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIOS = ROOT / 'data' / 'scenarios'
 STATIC = Path(__file__).resolve().parent / 'static'
+log = logging.getLogger(__name__)
 _ID = re.compile(r'^[A-Za-z0-9_.-]+$')
+SECURITY_HEADERS = {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    'Content-Security-Policy': ("default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; "
+                                "style-src 'self' 'unsafe-inline'; connect-src 'self'"),
+}
 MAX_UPLOAD_BYTES = 5_000_000
 MAX_CONCURRENT_RUNS = 2
 RATE_LIMIT = 10  # runs per client IP per RATE_WINDOW_S
@@ -37,13 +46,21 @@ class RunRequest(BaseModel):
 def create_app(runs_dir: str | Path | None = None) -> FastAPI:
     runs = Path(runs_dir or os.getenv('NETCOOP_RUNS_DIR', 'runs'))
     app = FastAPI(title='NetCoop AI')
+
+    @app.middleware('http')
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        return response
+
     tasks: dict[str, asyncio.Task] = {}
     finished_at: dict[str, float] = {}
     hit_log: dict[str, deque] = {}
     active = [0]
 
     def safe(value: str) -> str:
-        if not _ID.match(value) or value.startswith('.'):
+        if not _ID.match(value) or value.startswith('.') or value == 'labels':
             raise HTTPException(400, 'invalid identifier')
         return value
 
@@ -246,7 +263,8 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
                 raise ValueError('run has no normalized telemetry')
             patched = simulate_remediation(before, state.telemetry)
         except (OSError, ValueError, KeyError) as exc:
-            raise HTTPException(409, f'cannot remediate: {exc}')
+            log.info('remediate refused: %s', exc)
+            raise HTTPException(409, 'cannot remediate: run has no usable diagnosis')
         new_id = uuid4().hex[:12]
         result = await asyncio.to_thread(run_sync, patched, new_id, set())
         after = _cause(result, _report(result))
