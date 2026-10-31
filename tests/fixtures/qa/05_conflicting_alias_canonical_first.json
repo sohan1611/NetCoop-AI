@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "QA-05-CONFLICT-CANONICAL_FIRST",
+  "collected_at": "2026-10-31T09:00:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [],
+  "samples": [
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T09:00:00Z",
+      "latency_ms": 10,
+      "latency_s": 1.2,
+      "jitter_ms": 1
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

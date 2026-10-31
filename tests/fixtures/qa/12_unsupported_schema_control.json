@@ -1,0 +1,13 @@
+{
+  "schema_version": "9.0",
+  "incident_id": "QA-12-UNSUPPORTED",
+  "collected_at": "2026-10-31T09:00:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [],
+  "samples": [],
+  "services": [],
+  "symptoms": []
+}

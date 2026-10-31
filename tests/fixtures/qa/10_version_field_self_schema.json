@@ -1,0 +1,31 @@
+{
+  "incident_id": "QA-10-VERSION-ALIAS",
+  "collected_at": "2026-10-31T09:00:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "SW1",
+      "status": "up",
+      "cpu_pct": 10,
+      "mem_pct": 10,
+      "queue_drops": 0,
+      "interface_errors": 0
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "SW1",
+      "timestamp": "2026-10-31T09:00:00Z",
+      "latency_ms": 8,
+      "jitter_ms": 1,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 10
+    }
+  ],
+  "services": [],
+  "symptoms": [],
+  "version": "1.0"
+}

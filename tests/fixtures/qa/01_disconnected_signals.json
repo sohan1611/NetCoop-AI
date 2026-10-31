@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "QA-01-SPLIT-DEVICE",
+  "collected_at": "2026-10-31T09:00:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "SW-B",
+      "status": "up",
+      "cpu_pct": 20,
+      "mem_pct": 20,
+      "queue_drops": 50,
+      "interface_errors": 0
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "AP-A",
+      "timestamp": "2026-10-31T09:00:00Z",
+      "link_utilization_pct": 95,
+      "latency_ms": 12,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0
+    },
+    {
+      "device_id": "HOST-C",
+      "timestamp": "2026-10-31T09:00:00Z",
+      "latency_ms": 290,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

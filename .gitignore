@@ -8,3 +8,6 @@ Plan.txt
 .pytest_cache/
 .claude/
 .pytest-tmp*/
+NetCoop_AI_*
+docs/qa/findings.json
+docs/qa/NetCoop_AI_Adversarial_QA_Report.md

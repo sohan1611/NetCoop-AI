@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "QA-00-CONTROL",
+  "collected_at": "2026-10-31T09:00:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "SW-HEALTHY",
+      "status": "up",
+      "cpu_pct": 20,
+      "mem_pct": 25,
+      "queue_drops": 0,
+      "interface_errors": 0
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "SW-HEALTHY",
+      "timestamp": "2026-10-31T09:00:00Z",
+      "latency_ms": 10,
+      "jitter_ms": 1,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 20,
+      "rssi_dbm": -50,
+      "retransmission_pct": 0
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

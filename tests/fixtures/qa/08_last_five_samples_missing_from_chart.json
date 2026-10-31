@@ -1,0 +1,1662 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "QA-08-CHART-SAMPLE-CAP",
+  "collected_at": "2026-10-31T09:00:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "AP1",
+      "status": "up",
+      "queue_drops": 0,
+      "cpu_pct": 20,
+      "mem_pct": 20
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:00Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:01Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:02Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:03Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:04Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:05Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:06Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:07Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:08Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:09Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:10Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:11Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:12Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:13Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:14Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:15Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:16Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:17Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:18Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:19Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:20Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:21Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:22Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:23Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:24Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:25Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:26Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:27Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:28Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:29Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:30Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:31Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:32Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:33Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:34Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:35Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:36Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:37Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:38Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:39Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:40Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:41Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:42Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:43Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:44Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:45Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:46Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:47Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:48Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:49Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:50Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:51Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:52Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:53Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:54Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:55Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:56Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:57Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:58Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:00:59Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:00Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:01Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:02Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:03Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:04Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:05Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:06Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:07Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:08Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:09Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:10Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:11Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:12Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:13Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:14Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:15Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:16Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:17Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:18Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:19Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:20Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:21Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:22Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:23Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:24Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:25Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:26Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:27Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:28Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:29Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:30Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:31Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:32Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:33Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:34Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:35Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:36Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:37Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:38Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:39Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:40Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:41Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:42Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:43Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:44Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:45Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:46Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:47Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:48Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:49Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:50Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:51Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:52Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:53Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:54Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:55Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:56Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:57Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:58Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:01:59Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:00Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:01Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:02Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:03Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:04Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:05Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:06Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:07Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:08Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:09Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:10Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:11Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:12Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:13Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:14Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:15Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:16Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:17Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:18Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:19Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:20Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:21Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:22Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:23Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:24Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:25Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:26Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:27Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:28Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:29Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:30Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:31Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:32Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:33Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:34Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:35Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:36Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:37Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:38Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:39Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:40Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:41Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:42Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:43Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:44Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:45Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:46Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:47Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:48Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:49Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:50Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:51Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:52Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:53Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:54Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:55Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:56Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:57Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:58Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:02:59Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:00Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:01Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:02Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:03Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:04Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:05Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:06Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:07Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:08Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:09Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:10Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:11Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:12Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:13Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:14Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:15Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:16Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:17Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:18Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:19Z",
+      "latency_ms": 10,
+      "jitter_ms": 2,
+      "packet_loss_pct": 0,
+      "link_utilization_pct": 15
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:20Z",
+      "latency_ms": 500,
+      "jitter_ms": 60,
+      "packet_loss_pct": 20,
+      "link_utilization_pct": 96
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:21Z",
+      "latency_ms": 500,
+      "jitter_ms": 60,
+      "packet_loss_pct": 20,
+      "link_utilization_pct": 96
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:22Z",
+      "latency_ms": 500,
+      "jitter_ms": 60,
+      "packet_loss_pct": 20,
+      "link_utilization_pct": 96
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:23Z",
+      "latency_ms": 500,
+      "jitter_ms": 60,
+      "packet_loss_pct": 20,
+      "link_utilization_pct": 96
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T08:03:24Z",
+      "latency_ms": 500,
+      "jitter_ms": 60,
+      "packet_loss_pct": 20,
+      "link_utilization_pct": 96
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

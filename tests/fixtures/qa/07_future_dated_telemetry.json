@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "QA-07-FUTURE",
+  "collected_at": "2026-10-31T09:00:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "R1",
+      "status": "up",
+      "queue_drops": 90
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "R1",
+      "timestamp": "2099-01-01T10:00:00Z",
+      "latency_ms": 300,
+      "link_utilization_pct": 97,
+      "packet_loss_pct": 20
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

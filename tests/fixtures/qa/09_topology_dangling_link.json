@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "QA-09-BROKEN-TOPO",
+  "collected_at": "2026-10-31T09:00:00Z",
+  "topology": {
+    "nodes": [
+      {
+        "id": "CORE",
+        "type": "router",
+        "role": "core"
+      }
+    ],
+    "links": [
+      {
+        "src": "CORE",
+        "dst": "NONEXISTENT-SW",
+        "capacity_mbps": 1000
+      }
+    ]
+  },
+  "devices": [
+    {
+      "device_id": "CORE",
+      "status": "up"
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "CORE",
+      "timestamp": "2026-10-31T09:00:00Z",
+      "latency_ms": 10
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

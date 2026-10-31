@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "QA-04-COMPLEMENT",
+  "collected_at": "2026-10-31T09:00:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [],
+  "samples": [
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T09:00:00Z",
+      "latency_ms": 10
+    },
+    {
+      "device_id": "AP1",
+      "timestamp": "2026-10-31T09:00:00Z",
+      "packet_loss_pct": 9.5,
+      "link_utilization_pct": 91
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

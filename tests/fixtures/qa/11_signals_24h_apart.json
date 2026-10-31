@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "QA-11-SPLIT-TIME",
+  "collected_at": "2026-10-31T09:00:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "SW1",
+      "status": "up",
+      "queue_drops": 60,
+      "cpu_pct": 20,
+      "mem_pct": 20
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "SW1",
+      "timestamp": "2026-10-30T09:00:00Z",
+      "link_utilization_pct": 97,
+      "latency_ms": 5
+    },
+    {
+      "device_id": "SW1",
+      "timestamp": "2026-10-31T09:00:00Z",
+      "link_utilization_pct": 5,
+      "latency_ms": 300
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}
