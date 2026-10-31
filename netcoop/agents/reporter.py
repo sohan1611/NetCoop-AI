@@ -1,6 +1,7 @@
 ﻿"""Validated JSON and Markdown reports from correlator diagnoses."""
 from pathlib import Path
 from typing import Any
+from netcoop import llm
 from netcoop.agents.base import Agent
 from netcoop.playbook import PLAYBOOK
 from netcoop.protocol import Envelope, MsgType, Report
@@ -23,7 +24,7 @@ def _cell(value: Any) -> str:
     return str(value).replace('|', '\\|').replace('\n', ' ').replace('\r', ' ')
 
 
-def _markdown(report: Report) -> str:
+def _markdown(report: Report, narrative: str | None = None) -> str:
     lines = [f'# Incident {report.incident_id}', f'Run: {report.run_id}',
              '', '## Root cause', report.suspected_root_cause or 'Unknown',
              '', '## Confidence', f'{report.confidence:.1%} ({report.confidence_category})',
@@ -37,15 +38,18 @@ def _markdown(report: Report) -> str:
                            ('Limitations', report.limitations)):
         lines.extend(['', f'## {heading}', ''])
         lines.extend(f'- {item}' for item in items or ['None reported'])
+    if narrative:
+        lines.extend(['', '## Narrative', '', narrative])
     return '\n'.join(lines) + '\n'
 
 
 class ReporterAgent(Agent):
     name = 'reporter'
-    narrative = None  # Optional narrative hook reserved for T10.
+    narrative: str | None = None
 
-    def __init__(self, runs_dir: str | Path = 'runs') -> None:
+    def __init__(self, runs_dir: str | Path = 'runs', use_llm: bool = False) -> None:
         self.runs_dir = Path(runs_dir)
+        self.use_llm = use_llm
 
     async def handle(self, envelope: Envelope) -> list[Envelope]:
         try:
@@ -79,10 +83,17 @@ class ReporterAgent(Agent):
                 evidence_sources=diagnosis['evidence_sources'],
                 limitations=list(dict.fromkeys(limitations)), run_id=run_id,
             )
+            self.narrative = None
+            if self.use_llm:
+                self.narrative = llm.generate(
+                    'Summarize this network diagnosis in at most three sentences. '
+                    'Preserve the reported cause and confidence; do not invent facts.\n'
+                    + report.model_dump_json()
+                )
             directory = self.runs_dir / run_id
             directory.mkdir(parents=True, exist_ok=True)
             (directory / 'report.json').write_text(report.model_dump_json(indent=2) + '\n', encoding='utf-8')
-            (directory / 'report.md').write_text(_markdown(report), encoding='utf-8')
+            (directory / 'report.md').write_text(_markdown(report, self.narrative), encoding='utf-8')
             return [Envelope(type=MsgType.FINDING, sender=self.name,
                              recipient=envelope.sender, correlation_id=run_id,
                              payload={'report': report.model_dump(mode='json'), 'narrative': self.narrative})]

@@ -22,9 +22,9 @@ from netcoop.state import RunState
 def build_orchestrator(runs_dir: str | Path = 'runs',
                        fail_agents: set[str] | None = None,
                        no_llm: bool = True) -> Orchestrator:
-    """Shared real-agent factory; execution currently always uses offline rules."""
-    agents = [NormalizerAgent(), PerformanceAgent(), InfrastructureAgent(),
-              ConnectivityAgent(), CorrelatorAgent(), ReporterAgent(runs_dir)]
+    """Shared real-agent factory with optional Gemini assistance."""
+    agents = [NormalizerAgent(use_llm=not no_llm), PerformanceAgent(), InfrastructureAgent(),
+              ConnectivityAgent(), CorrelatorAgent(), ReporterAgent(runs_dir, use_llm=not no_llm)]
     return Orchestrator({agent.name: agent for agent in agents},
                         runs_dir=runs_dir, fail_agents=fail_agents)
 
@@ -53,14 +53,14 @@ def _print_report(report: Report, markdown: bool = False) -> int:
     return 2 if report.status == 'error' else 0
 
 
-def _evaluate(directory: Path) -> int:
+def _evaluate(directory: Path, no_llm: bool = True) -> int:
     labels = json.loads((directory / 'labels.json').read_text(encoding='utf-8'))
     print(f"{'scenario':<30} {'expected':<23} {'got':<23} confidence pass")
     passed = 0
     with TemporaryDirectory(prefix='netcoop-evaluate-') as runs_dir:
         for scenario, expected in labels.items():
             raw = (directory / f'{scenario}.json').read_text(encoding='utf-8')
-            result = asyncio.run(build_orchestrator(runs_dir).run(raw))
+            result = asyncio.run(build_orchestrator(runs_dir, no_llm=no_llm).run(raw))
             report = _report(result)
             got = _cause(result, report)
             matched = got == expected
@@ -76,16 +76,17 @@ def main(argv: list[str] | None = None) -> int:
     diagnose = commands.add_parser('diagnose')
     diagnose.add_argument('file', type=Path)
     diagnose.add_argument('--fail-agent', action='append', default=[])
-    diagnose.add_argument('--no-llm', action='store_true', default=True)
+    diagnose.add_argument('--no-llm', action='store_true')
     diagnose.add_argument('--md', action='store_true')
     diagnose.add_argument('--runs-dir', type=Path, default=Path('runs'))
     evaluate = commands.add_parser('evaluate')
     evaluate.add_argument('--dir', type=Path, default=Path('data/scenarios'))
-    evaluate.add_argument('--no-llm', action='store_true', default=True)
+    evaluate.add_argument('--no-llm', action='store_true')
     for name in ('resume', 'remediate'):
         command = commands.add_parser(name)
         command.add_argument('run_id')
         command.add_argument('--runs-dir', type=Path, default=Path('runs'))
+        command.add_argument('--no-llm', action='store_true')
         if name == 'remediate':
             command.add_argument('--approve', action='store_true')
     args = parser.parse_args(argv)
@@ -94,12 +95,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     try:
         if args.command == 'evaluate':
-            return _evaluate(args.dir)
+            return _evaluate(args.dir, no_llm=args.no_llm)
         if args.command == 'diagnose':
             raw = args.file.read_text(encoding='utf-8')
-            runner = build_orchestrator(args.runs_dir, set(args.fail_agent))
+            runner = build_orchestrator(args.runs_dir, set(args.fail_agent), no_llm=args.no_llm)
             return _print_report(_report(asyncio.run(runner.run(raw))), args.md)
-        runner = build_orchestrator(args.runs_dir)
+        runner = build_orchestrator(args.runs_dir, no_llm=args.no_llm)
         if args.command == 'resume':
             return _print_report(_report(asyncio.run(runner.resume(args.run_id))))
         state = RunState.load(args.run_id, args.runs_dir)

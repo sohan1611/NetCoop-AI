@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from netcoop import llm
 from netcoop.agents.base import Agent
 from netcoop.protocol import DataQuality, Envelope, Finding, MsgType
 
@@ -97,6 +98,7 @@ ISSUE_PENALTIES = {
     "wrong_type": 0.08,
     "unknown": 0.02,
     "severity": 0.05,
+    "llm_mapped": 0.0,
 }
 
 SECTION_FIELDS = {
@@ -151,6 +153,7 @@ class NormalizeResult(BaseModel):
 
 @dataclass
 class _QualityTracker:
+    use_llm: bool = False
     issues: list[str] = field(default_factory=list)
     penalty: float = 0.0
 
@@ -237,11 +240,40 @@ def _normalize_status(value: Any, tracker: _QualityTracker, path: str,
     return mapped
 
 
+def _map_leaf_fields(raw: dict, sections: tuple[str, ...], tracker: _QualityTracker,
+                     path: str, ignored: set[str] | None = None) -> dict:
+    if not tracker.use_llm:
+        return raw
+    unknown = [key for key, value in raw.items()
+               if isinstance(key, str) and key not in (ignored or set())
+               and not isinstance(value, (dict, list))
+               and all(_resolve_field(key, section)[0] is None for section in sections)]
+    if not unknown:
+        return raw
+    mappings = llm.map_unknown_fields(unknown) or {}
+    result = dict(raw)
+    occupied = {_resolve_field(key, section)[0] for key in raw if isinstance(key, str)
+                for section in sections}
+    for key in unknown:
+        mapping = mappings.get(key, {})
+        target, confidence = mapping.get('target'), mapping.get('confidence')
+        if (isinstance(target, str) and any(target in SECTION_FIELDS[s] for s in sections)
+                and isinstance(confidence, (int, float)) and not isinstance(confidence, bool)
+                and 0.7 <= confidence <= 1 and target not in occupied):
+            result[target] = result.pop(key)
+            occupied.add(target)
+            tracker.add('llm_mapped',
+                        f'llm_mapped {path}.{key} -> {target} (confidence={confidence:g})')
+    return result
+
+
 def _normalize_row(raw: Any, section: str, tracker: _QualityTracker,
                    path: str) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         tracker.add("wrong_type", f"wrong type for {path}; expected an object")
         return None
+    if section in ('devices', 'samples'):
+        raw = _map_leaf_fields(raw, (section,), tracker, path)
     result: dict[str, Any] = {}
     for key, value in raw.items():
         if not isinstance(key, str):
@@ -310,6 +342,8 @@ def _split_metric_row(row: dict[str, Any], tracker: _QualityTracker, path: str,
         tracker.add("wrong_type", f"wrong type for {path}.metrics; expected an object")
         return device, sample
     ignored = {"device_id", "device", "id", "timestamp", "status", "type", "metrics"}
+    metrics = _map_leaf_fields(metrics, ('devices', 'samples'), tracker,
+                               f'{path}.metrics', ignored)
     for key, value in metrics.items():
         if key in ignored:
             continue
@@ -570,9 +604,9 @@ def _validate_rows(telemetry: dict[str, Any], tracker: _QualityTracker) -> None:
     telemetry["samples"] = unique_samples
 
 
-def normalize(raw: str | bytes | dict | list) -> NormalizeResult:
+def normalize(raw: str | bytes | dict | list, use_llm: bool = False) -> NormalizeResult:
     """Normalize supported telemetry into schema 1.0 without raising."""
-    tracker = _QualityTracker()
+    tracker = _QualityTracker(use_llm=use_llm)
     try:
         source = _parse_raw(raw)
         if isinstance(source, list):
@@ -602,9 +636,12 @@ class NormalizerAgent(Agent):
 
     name = "normalizer"
 
+    def __init__(self, use_llm: bool = False) -> None:
+        self.use_llm = use_llm
+
     @staticmethod
-    def normalize(raw: str | bytes | dict | list) -> NormalizeResult:
-        return normalize(raw)
+    def normalize(raw: str | bytes | dict | list, use_llm: bool = False) -> NormalizeResult:
+        return normalize(raw, use_llm=use_llm)
 
     async def handle(self, envelope: Envelope) -> list[Envelope]:
         try:
@@ -618,7 +655,7 @@ class NormalizerAgent(Agent):
                 return [self._error_envelope(
                     envelope, "TASK payload must contain 'raw' or 'telemetry'"
                 )]
-            result = normalize(raw)
+            result = normalize(raw, use_llm=self.use_llm)
             if result.error is not None or result.telemetry is None:
                 return [self._error_envelope(envelope, result.error or "normalization failed")]
 
