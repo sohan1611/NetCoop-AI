@@ -23,7 +23,7 @@ Every task: add/extend pytest tests in tests/ for what it builds; `pytest -q` mu
 | T16 | DONE | medium | Fix review bugs B1–B8 below (S4 review). Owner: Sonnet until Codex quota resets | `pytest -q` passes, `evaluate` 16/16, `python scripts/stress_test.py` shows no CRASH and B2–B7 cases diagnosed correctly |
 | T17 | DONE | medium | Fix security V1–V8 and bugs B9–B14 below (S6 review). Owner: Sonnet (Codex if quota back) | `pytest -q` passes, `evaluate` 16/16, `scripts/stress_test.py` + `scripts/hostile_inputs.py` no CRASH, 20k-device input < 5 s and = normal, no report lists an alternative with confidence ≥ the chosen cause |
 | T18 | DONE | medium | Bugs N1–N7 + UI backend endpoints A1–A6 below (S8 review). Owner: Sonnet now | pytest passes, evaluate 16/16, 100 healthy org records with an extra field → `normal` ≥ 0.6, new endpoints covered in tests/test_api.py |
-| T19 | TODO | medium (Codex, after 5:24 PM) | Build the console UI exactly per `docs/UI_PLAN.md` + `docs/ui-reference/*.png`. Needs T18 A1–A6 first | UI_PLAN §7 acceptance |
+| T19 | IN PROGRESS — Group 1 shell implemented; Groups 2–5 pending | medium (Codex, after 5:24 PM) | Build the console UI exactly per `docs/UI_PLAN.md` + `docs/ui-reference/*.png`. Needs T18 A1–A6 first | UI_PLAN §7 acceptance |
 
 ## Canonical telemetry (input after normalization)
 ```json

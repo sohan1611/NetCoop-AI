@@ -92,4 +92,6 @@ In `data/scenarios/` (regenerate with `python scripts/gen_scenarios.py`): normal
 Synthetic data only; remediation is simulated and touches nothing real; signatures are rule-based and tuned for the campus topology in the scenarios; Gemini output is advisory only.
 
 ## Acknowledgements
+Dashboard icons use inline [Lucide](https://lucide.dev/) SVG paths, licensed under the ISC licence.
+
 Python, pydantic, FastAPI, uvicorn, networkx, cytoscape.js (CDN, dashboard), google-genai (optional), python-dotenv, pytest, and the Model Context Protocol Python SDK (optional). Mock-data format from the hackathon organizers.

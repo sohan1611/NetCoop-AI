@@ -1,56 +1,112 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NetCoop AI</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
 <link rel="stylesheet" href="style.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js" integrity="sha512-EY3U1MWdgKx0P1dqTE4inlKz2cpXtWpsR1YUyD855Hs6RL/A0cyvrKh60EpE8wDZ814cTe1KgRK+sG0Rn792vQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
-<header>
-  <h1>NetCoop AI <span>multi-agent network fault diagnosis</span></h1>
+<!-- Lucide icon paths (ISC); local symbols keep icons independent of external assets. -->
+<svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="icon-network" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M5 16v-4h14v4"/></symbol>
+  <symbol id="icon-bot" viewBox="0 0 24 24"><path d="M12 8V4H8M2 12h2m16 0h2M9 13v2m6-2v2"/><rect x="4" y="8" width="16" height="12" rx="2"/></symbol>
+  <symbol id="icon-play" viewBox="0 0 24 24"><path d="m9 5 12 7-12 7V5Z"/></symbol>
+  <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="icon-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11ZM12 8v4m0 4h.01"/></symbol>
+  <symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></symbol>
+  <symbol id="icon-terminal" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="m7 8 4 4-4 4m6 0h4"/></symbol>
+  <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6m2-6h6m2 8h6"/></symbol>
+  <symbol id="icon-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="icon-mesh" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 3h7v7M3 14v7h7M14 7h-4m-3 3v4m3 3h4m3-7v4"/></symbol>
+  <symbol id="icon-workflow" viewBox="0 0 24 24"><path d="M3 7h5l8 10h5M3 17h5l8-10h5m-3-3 3 3-3 3m0 4 3 3-3 3"/></symbol>
+  <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+</svg>
+<header id="top-bar" class="top-bar">
+  <button id="sidebar-toggle" class="icon-button hamburger" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false"><svg class="icon"><use href="#icon-menu"/></svg></button>
+  <a class="brand" href="#console" data-view-target="console"><svg class="icon brand-icon"><use href="#icon-network"/></svg><span><strong>Autonomous Agent Diagnostics</strong><span id="campus-subtitle" class="mono">Campus Core Grid • idle</span></span></a>
+  <nav id="top-nav" class="top-nav" aria-label="Console views">
+    <button class="nav-tab active" data-view-target="console" aria-current="page">Console</button>
+    <button class="nav-tab" data-view-target="topology">Topology</button>
+    <button class="nav-tab" data-view-target="incidents">Incidents</button>
+    <button class="nav-tab" data-view-target="pipeline">Agent Pipeline</button>
+    <button class="nav-tab" data-view-target="telemetry">Telemetry Stream</button>
+  </nav>
+  <label class="search-box"><svg class="icon"><use href="#icon-search"/></svg><input id="search" type="search" aria-label="Search telemetry and messages" placeholder="Grep flow, IP, MAC..."></label>
+  <button id="acknowledge-all" class="button outline mono">Acknowledge All</button>
+  <button id="quarantine" class="button danger"><svg class="icon"><use href="#icon-shield"/></svg><span>Execute Quarantine</span></button>
+  <div class="toolbar-icons">
+    <button id="notifications" class="icon-button" aria-label="View incidents" data-view-target="incidents"><svg class="icon"><use href="#icon-bell"/></svg></button>
+    <button class="icon-button" aria-label="Open CLI terminal" data-view-target="terminal"><svg class="icon"><use href="#icon-terminal"/></svg></button>
+    <button class="icon-button" aria-label="Open system settings" data-view-target="settings"><svg class="icon"><use href="#icon-settings"/></svg></button>
+  </div>
+  <span class="avatar mono" aria-label="NetCoop">NC</span>
 </header>
-<main>
-  <section class="card controls">
-    <label>Scenario
-      <select id="scenario"></select>
-    </label>
-    <label>or upload telemetry (JSON)
-      <input type="file" id="file" accept=".json,application/json">
-    </label>
-    <label>Fail an agent (degrade test)
-      <select id="fail">
-        <option value="">none</option>
-        <option>performance</option><option>infrastructure</option><option>connectivity</option><option>correlator</option>
-      </select>
-    </label>
-    <button id="run">Run diagnosis</button>
-    <div id="status" class="muted" role="status"></div>
-  </section>
-
-  <section class="card">
-    <h2>Agent messages</h2>
-    <ol id="timeline" class="timeline"><li class="muted">No run yet.</li></ol>
-  </section>
-
-  <section class="card">
-    <h2>Topology</h2>
-    <div id="topo"></div>
-    <p class="muted legend"><span class="dot bad"></span> affected <span class="dot ok"></span> other</p>
-  </section>
-
-  <section class="card" id="report" hidden>
-    <h2>Diagnosis</h2>
-    <div id="summary"></div>
-    <h3>Evidence</h3><ul id="evidence"></ul>
-    <h3>Recommended actions</h3><ul id="actions"></ul>
-    <h3>Alternatives</h3><ul id="alts"></ul>
-    <h3>Limitations</h3><ul id="limits"></ul>
-    <button id="fix" hidden>Approve simulated fix</button>
-    <div id="fixresult" role="status"></div>
-  </section>
+<aside id="sidebar" class="sidebar" aria-label="Operational navigation">
+  <div class="card controller-card"><svg class="icon"><use href="#icon-bot"/></svg><div><strong>NetCoop AI</strong><span class="mono">Swarm Controller 01</span></div></div>
+  <button id="spawn-run" class="button primary"><svg class="icon"><use href="#icon-play"/></svg>Spawn Agent Run</button>
+  <p class="nav-label mono">OPERATIONAL DOMAINS</p>
+  <nav class="domain-nav" aria-label="Operational domains">
+    <button data-view-target="topology"><svg class="icon"><use href="#icon-network"/></svg>Live Topology</button>
+    <button data-view-target="pipeline"><svg class="icon"><use href="#icon-bot"/></svg>Telemetry Agents</button>
+    <button data-view-target="incidents"><svg class="icon"><use href="#icon-activity"/></svg><span>Correlated Incidents</span><span id="critical-badge" class="critical-badge mono" hidden>—</span></button>
+    <button data-view-target="devices"><svg class="icon"><use href="#icon-mesh"/></svg>Device Mesh</button>
+    <button data-view-target="playbooks"><svg class="icon"><use href="#icon-workflow"/></svg>Automated Playbooks</button>
+    <button data-view-target="terminal"><svg class="icon"><use href="#icon-terminal"/></svg>CLI Terminal</button>
+  </nav>
+  <div class="sidebar-bottom">
+    <nav class="domain-nav" aria-label="System navigation">
+      <button data-view-target="feeds"><svg class="icon"><use href="#icon-activity"/></svg>Telemetry Feeds</button>
+      <button data-view-target="settings"><svg class="icon"><use href="#icon-settings"/></svg>System Settings</button>
+    </nav>
+    <footer class="sidebar-footer mono"><span id="api-host">HOST: —</span><span id="api-uptime">UP: —</span></footer>
+  </div>
+</aside>
+<main id="main" data-view="console">
+  <div id="view-console" class="view" data-view-panel="console">
+    <!-- GROUP 2: hero and pipeline renderers extend these stable containers. -->
+    <section id="hero" class="card hero-placeholder"><p class="eyebrow mono">NETCOOP AI ROOT-CAUSE ENGINE <span>// ORCHESTRATOR CLUSTER</span></p><h1>NetCoop AI // Autonomous NOC Swarm <span id="app-version">—</span></h1><p class="muted">Multi-agent network fault diagnosis</p></section>
+    <section id="pipeline" class="card section-placeholder"><h2>Autonomous Multi-Agent Coordination Pipeline</h2><p id="pipeline-empty" class="muted">No run yet.</p></section>
+    <div id="report-layout" class="report-layout">
+      <div id="report-column" class="report-column">
+        <!-- Legacy workflow remains reachable until Groups 2–5 replace it. -->
+        <section id="run-controls" class="card controls" tabindex="-1">
+          <label>Scenario<select id="scenario"></select></label>
+          <label>or upload telemetry (JSON)<input type="file" id="file" accept=".json,application/json"></label>
+          <label>Fail an agent (degrade test)<select id="fail"><option value="">none</option><option>performance</option><option>infrastructure</option><option>connectivity</option><option>correlator</option></select></label>
+          <button id="run">Run diagnosis</button><div id="status" class="muted" role="status"></div>
+        </section>
+        <section id="legacy-timeline" class="card" tabindex="-1"><h2>Agent messages</h2><ol id="timeline" class="timeline"><li class="muted">No run yet.</li></ol></section>
+        <section id="legacy-topology" class="card" tabindex="-1"><h2>Topology</h2><div id="topo"></div><p class="muted legend"><span class="dot bad"></span> affected <span class="dot ok"></span> other</p></section>
+        <!-- GROUP 3: replace legacy report contents inside this stable section. -->
+        <section class="card" id="report" hidden>
+          <h2>Diagnosis</h2><div id="summary"></div>
+          <h3>Evidence</h3><ul id="evidence"></ul>
+          <h3>Recommended actions</h3><ul id="actions"></ul>
+          <h3>Alternatives</h3><ul id="alts"></ul>
+          <h3>Limitations</h3><ul id="limits"></ul>
+          <button id="fix" hidden>Approve simulated fix</button><div id="fixresult" role="status"></div>
+        </section>
+      </div>
+      <!-- GROUP 4: latency trend, stat tiles and agent bus. -->
+      <aside id="right-rail" class="right-rail" aria-label="Diagnostic metrics"><div id="latency-trend"></div><div id="rail-stats"></div><div id="agent-bus"></div></aside>
+    </div>
+  </div>
+  <!-- GROUP 5: full view content and run/remediation modals. -->
+  <section id="view-topology" class="view card" data-view-panel="topology" hidden><h2>Live Topology</h2><p class="muted">The current topology is available in the console.</p><button class="button outline" data-view-target="console" data-focus="legacy-topology">Open console topology</button></section>
+  <section id="view-incidents" class="view card" data-view-panel="incidents" hidden><h2>Correlated Incidents</h2><p class="muted">Incident view pending.</p></section>
+  <section id="view-pipeline" class="view card" data-view-panel="pipeline" hidden><h2>Agent Pipeline</h2><p class="muted">The current agent timeline is available in the console.</p><button class="button outline" data-view-target="console" data-focus="legacy-timeline">Open agent timeline</button></section>
+  <section id="view-telemetry" class="view card" data-view-panel="telemetry" hidden><h2>Telemetry Stream</h2><p class="muted">The current message stream is available in the console.</p><button class="button outline" data-view-target="console" data-focus="legacy-timeline">Open message stream</button></section>
+  <section id="view-devices" class="view card" data-view-panel="devices" hidden><h2>Device Mesh</h2><p class="muted">Device view pending.</p></section>
+  <section id="view-playbooks" class="view card" data-view-panel="playbooks" hidden><h2>Automated Playbooks</h2><p class="muted">Playbook view pending.</p></section>
+  <section id="view-terminal" class="view card" data-view-panel="terminal" hidden><h2>CLI Terminal</h2><p class="muted">Terminal view pending.</p></section>
+  <section id="view-feeds" class="view card" data-view-panel="feeds" hidden><h2>Telemetry Feeds</h2><p class="muted">Telemetry feed view pending.</p></section>
+  <section id="view-settings" class="view card" data-view-panel="settings" hidden><h2>System Settings</h2><p class="muted">Settings view pending.</p></section>
 </main>
+<div id="run-modal-root"><!-- GROUP 5: run modal --></div>
+<div id="remediate-modal-root"><!-- GROUP 5: simulated remediation confirmation --></div>
 <script src="app.js"></script>
 </body>
 </html>
