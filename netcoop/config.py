@@ -21,6 +21,12 @@ THRESHOLDS: dict[str, dict[str, float]] = {
     "queue_drops": {"warn": 1.0, "crit": 10.0},
 }
 
+# Service success worsens as it falls; response time worsens as it rises.
+SERVICE_THRESHOLDS: dict[str, dict[str, float]] = {
+    "success_rate_pct": {"warn": 95.0, "crit": 80.0},
+    "response_ms": {"warn": 250.0, "crit": 1000.0},
+}
+
 HYPOTHESES: list[str] = [
     "normal",
     "congestion",
