@@ -3,7 +3,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   runId: null, health: null, runs: null, report: null, details: null,
   messages: [], consoleMessages: [], topology: null, view: 'console', search: '', acknowledged: readAcknowledged(),
-  running: false, scenariosReady: false, failAgent: null, remediation: null, remediating: false,
+  running: false, scenariosReady: false, failAgent: null, remediation: null, remediating: false, telemetryExpanded: false,
   playbooks: null, playbooksError: '', backendPending: 0, backendFailed: false, error: '',
 };
 let cy = null, source = null;
@@ -23,6 +23,8 @@ const LABELS = {
   rssi_dbm: 'Wi-Fi RSSI', retransmission_pct: 'Retransmissions',
   dns_status: 'DNS Status', dns_success_rate_pct: 'DNS Success Rate', dns_response_ms: 'DNS Response Time',
   dhcp_status: 'DHCP Status', dhcp_success_rate_pct: 'DHCP Success Rate', dhcp_response_ms: 'DHCP Response Time',
+  status: 'Status', bandwidth_mbps: 'Bandwidth', throughput_mbps: 'Throughput',
+  capacity_mbps: 'Link Capacity', success_rate_pct: 'Success Rate', response_ms: 'Response Time',
   high: 'High', medium: 'Medium', low: 'Low', insufficient: 'Insufficient',
   ap: 'Wi-Fi AP', router: 'Router', switch: 'Switch', server: 'Server', host: 'Host',
 };
@@ -756,11 +758,8 @@ function renderRootCause() {
   box.className = 'root-cause' + (exceptional ? r.status === 'error' ? ' error' : ' insufficient' : '');
   const calloutLabel = el('p', r?.status === 'error' ? 'INPUT REJECTED' : exceptional ? 'INSUFFICIENT EVIDENCE' : 'SYNTHESIZED PROBABLE ROOT CAUSE', 'mono callout-label');
   if (!exceptional) calloutLabel.append(el('strong', r?.cause ? ' / ' + label(r.cause) : ''));
-  const cause = r?.status === 'error' ? r.limitations?.join('; ') : r?.suspected_root_cause;
+  const cause = r?.suspected_root_cause;
   box.append(calloutLabel, el('p', cause ? '“' + humanText(cause) + '”' : '—', 'root-cause-text'));
-  if (r?.status === 'insufficient_evidence' && r.limitations?.length) {
-    box.append(el('p', 'Limitations: ' + humanText(r.limitations.slice(0, 3).join('; ')), 'muted report-limitations'));
-  }
   if (!exceptional) box.append(el('p', r?.affected_devices?.length ?
     (r.affected_devices.length === 1 ? 'Affected device: ' : 'Affected devices: ') + r.affected_devices.join(', ') : '—', 'affected-sentence'));
   const meta = el('div', undefined, 'callout-meta');
@@ -771,7 +770,10 @@ function renderRootCause() {
   }
   if (!inputRejected()) meta.append(el('span', 'Multi-Agent Consensus: ' + percent(r?.confidence) + ' ' + label(r?.confidence_category) + ' Confidence'));
   if (meta.children.length) box.append(meta);
-  if (!exceptional && r?.limitations?.length) box.append(el('p', 'Limitations: ' + humanText(r.limitations.join('; ')), 'muted report-limitations'));
+  const limitations = r?.limitations || [];
+  $('report-limitations').hidden = !limitations.length;
+  $('limitations-label').textContent = 'Limitations (' + limitations.length + ')';
+  $('limitations-list').replaceChildren(...limitations.map((item) => el('li', humanText(item))));
 }
 function renderAffectedDevices() {
   const grid = $('affected-devices'), ids = state.report?.affected_devices || [];
@@ -781,7 +783,8 @@ function renderAffectedDevices() {
     const card = el('article', undefined, 'device-card');
     card.append(el('span', roleLabel(d), 'mono stat-label'), el('strong', id),
       el('p', [d?.location, d?.type ? label(d.type) : null].filter(Boolean).join(' · ') || '—', 'device-description'));
-    card.append(el('span', d?.worst_metric ? metricText(d.worst_metric, d.worst_value, d.unit) : '—',
+    card.append(el('span', d?.worst_metric ? label(d.worst_metric) + ' ' + display(d.worst_value) + unitSuffix(d.unit) +
+      (d.severity ? ' · ' + d.severity : '') : '—',
       'pill ' + (d?.severity === 'critical' ? 'alert' : d?.severity === 'warning' ? 'flagged' : '')));
     grid.append(card);
   });
@@ -797,8 +800,10 @@ function renderEvidence() {
   rows.slice(0, 5).forEach((e) => {
     const tile = el('article', undefined, 'evidence-tile');
     tile.dataset.searchable = '';
+    const value = el('strong', display(e.value), 'metric-value ' + evidenceTone(e));
+    if (unitSuffix(e.unit)) value.append(el('span', unitSuffix(e.unit), 'metric-unit'));
     tile.append(el('span', label(e.metric), 'mono stat-label'),
-      el('strong', display(e.value) + unitSuffix(e.unit), 'metric-value ' + evidenceTone(e)),
+      value,
       el('span', e.baseline != null ? 'Baseline: ' + e.baseline + unitSuffix(e.unit) :
         e.threshold != null ? 'Threshold: ' + e.threshold + unitSuffix(e.unit) : '—', 'mono evidence-detail'),
       el('span', display(e.device_id), 'mono evidence-detail'));
@@ -808,18 +813,28 @@ function renderEvidence() {
 }
 function renderTelemetry() {
   const body = $('telemetry-rows'), affected = new Set(state.report?.affected_devices || []);
-  const rows = (state.details?.mappings || []).filter((m) => affected.has(m.device_id));
+  const evidence = state.report?.supporting_evidence || [];
+  const priority = (m) => evidence.some((e) => e.device_id === m.device_id && e.metric === m.metric) ? 0 :
+    m.note || m.raw_value !== m.value ? 1 : 2;
+  const rows = (state.details?.mappings || []).filter((m) => affected.has(m.device_id))
+    .slice().sort((a, b) => priority(a) - priority(b));
   body.replaceChildren();
-  rows.forEach((m) => {
+  (state.telemetryExpanded ? rows : rows.slice(0, 6)).forEach((m) => {
     const row = el('tr'); row.dataset.searchable = '';
     row.append(el('td', display(m.source_format), 'telemetry-feed'), el('td', display(m.device_id)),
-      el('td', display(m.raw_path) + ' = ' + display(m.raw_value), 'raw-fragment'),
+      el('td', display(m.raw_path) + (m.raw_value === m.value && !m.note ? '' : ' = ' + display(m.raw_value)), 'raw-fragment'),
       el('td', metricText(m.metric, m.value, m.unit), evidenceTone(m)));
     row.title = m.note || ''; body.append(row);
   });
   $('telemetry-empty').textContent = rows.length ? '' : state.report ? 'No normalization mappings for affected devices.' : '—';
   $('telemetry-empty').hidden = !!rows.length;
+  $('telemetry-more').hidden = rows.length <= 6;
+  $('telemetry-more').textContent = state.telemetryExpanded ? 'Show less' : '+' + (rows.length - 6) + ' more';
+  $('telemetry-more').setAttribute('aria-expanded', String(state.telemetryExpanded));
 }
+$('telemetry-more').onclick = () => {
+  state.telemetryExpanded = !state.telemetryExpanded; renderTelemetry(); renderSearch();
+};
 function confidenceBar(value) {
   const bar = el('div', undefined, 'confidence-track');
   bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-label', 'Hypothesis confidence');
@@ -839,9 +854,19 @@ function renderHypotheses() {
   primary.append(el('p', 'Primary Hypothesis: ' + label(r?.cause) + ' on ' + (r?.affected_devices?.join(', ') || '—') +
     ' — ' + percent(r?.confidence) + ' (' + label(r?.confidence_category) + ' Confidence)', 'primary-title mono'),
     confidenceBar(r?.confidence), el('p', humanText(d?.primary_rationale) || '—', 'hypothesis-rationale'));
-  const alternatives = d?.alternatives?.length ? d.alternatives : (r?.alternative_causes || []).map((cause) => ({ cause }));
+  // /details exposes each analysis agent's top hypothesis and its actual score.
+  const rejectedHypotheses = (d?.agents || [])
+    .filter((a) => ['performance', 'infrastructure', 'connectivity'].includes(a.name) &&
+      a.top_hypothesis && a.top_hypothesis !== r?.cause && Number.isFinite(a.score))
+    .sort((a, b) => b.score - a.score)
+    .filter((a, i, all) => all.findIndex((other) => other.top_hypothesis === a.top_hypothesis) === i)
+    .slice(0, 2).map((a) => ({ cause: a.top_hypothesis, confidence: a.score, rationale: a.summary, rejected: true }));
+  const alternatives = r?.alternative_causes?.length ?
+    d?.alternatives?.length ? d.alternatives : r.alternative_causes.map((cause) => ({ cause })) :
+    d?.alternatives?.length ? [...d.alternatives].sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 2).map((a) => ({ ...a, rejected: true })) : rejectedHypotheses;
   alternatives.forEach((a) => {
-    const known = Number.isFinite(a.confidence), ruledOut = known && a.confidence < 0.2;
+    const known = Number.isFinite(a.confidence), ruledOut = a.rejected || known && a.confidence < 0.2;
     const card = el('article', undefined, 'alternative-card' + (known ? ruledOut ? ' ruled-out' : ' partial' : ''));
     const heading = el('div', undefined, 'alternative-heading');
     heading.append(el('strong', label(a.cause)), el('span', percent(a.confidence) + ' Probability', 'mono'));
@@ -898,6 +923,7 @@ function resetRun() {
   state.error = ''; state.remediation = null; $('remediate-modal').close();
   state.runId = null; state.report = null; state.details = null; state.topology = null;
   state.messages = []; state.consoleMessages = [];
+  state.telemetryExpanded = false; $('report-limitations').open = false;
   if (cy) { cy.destroy(); cy = null; }
   $('topo').textContent = '';
   $('topology-device').replaceChildren(el('p', 'Select a node to inspect its metrics.', 'muted'));
@@ -1022,6 +1048,17 @@ $('spawn-run').onclick = () => {
   window.openRunModal();
 };
 $('quarantine').onclick = () => window.openRemediateModal();
+$('mobile-quarantine').onclick = () => {
+  $('mobile-overflow').open = false; window.openRemediateModal();
+};
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('#mobile-overflow')) $('mobile-overflow').open = false;
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && $('mobile-overflow').open) {
+    $('mobile-overflow').open = false; $('mobile-overflow').querySelector('summary').focus();
+  }
+});
 $('acknowledge-all').onclick = () => {
   // Acknowledge all currently listed incidents, including the selected run.
   const runs = [...(state.runs || [])];

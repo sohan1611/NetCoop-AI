@@ -40,6 +40,10 @@
   <label class="search-box"><svg class="icon"><use href="#icon-search"/></svg><input id="search" type="search" aria-label="Search telemetry and messages" placeholder="Grep flow, IP, MAC..."></label>
   <button id="acknowledge-all" class="button outline mono">Acknowledge All</button>
   <button id="quarantine" class="button danger"><svg class="icon"><use href="#icon-shield"/></svg><span>Execute Quarantine</span></button>
+  <details id="mobile-overflow" class="mobile-overflow">
+    <summary aria-label="More console actions"><svg class="icon"><use href="#icon-menu"/></svg></summary>
+    <div class="overflow-menu"><button id="mobile-quarantine" class="button danger">Execute Quarantine</button></div>
+  </details>
   <div class="toolbar-icons">
     <button id="notifications" class="icon-button" aria-label="View incidents" data-view-target="incidents"><svg class="icon"><use href="#icon-bell"/></svg></button>
     <button class="icon-button" aria-label="Open CLI terminal" data-view-target="terminal"><svg class="icon"><use href="#icon-terminal"/></svg></button>
@@ -113,12 +117,14 @@
           <p id="report-state" class="muted" role="status"></p>
           <div id="report-content">
             <div id="summary" class="root-cause"></div>
+            <details id="report-limitations" class="report-limitations" hidden><summary id="limitations-label">Limitations</summary><ul id="limitations-list"></ul></details>
             <section id="affected-section" class="report-section"><h3><svg class="icon"><use href="#icon-network"/></svg>Affected Devices &amp; Campus Network Segments</h3><div id="affected-devices" class="affected-grid"></div></section>
             <section id="evidence-section" class="report-section">
               <header class="section-heading"><h3><svg class="icon"><use href="#icon-activity"/></svg>Supporting Evidence &amp; Telemetry Findings</h3><span id="sample-window" class="mono section-note">—</span></header>
               <div id="evidence" class="evidence-grid"></div>
               <div class="table-scroll telemetry-scroll" tabindex="0" role="region" aria-label="Normalized telemetry mappings"><table id="telemetry-table"><thead><tr><th>Telemetry Feed</th><th>Source Device</th><th>Raw Payload Fragment</th><th>Normalized Metric</th></tr></thead><tbody id="telemetry-rows"></tbody></table></div>
               <p id="telemetry-empty" class="muted"></p>
+              <button id="telemetry-more" class="button outline" aria-expanded="false" aria-controls="telemetry-rows" hidden></button>
             </section>
             <p id="hypotheses-empty" class="muted empty-state" hidden>No hypothesis — input rejected by normalizer</p>
             <section id="hypotheses-section" class="report-section"><h3><svg class="icon"><use href="#icon-workflow"/></svg>Hypothesis Confidence &amp; Alternative Explanations Evaluated</h3><div id="primary-hypothesis" class="primary-hypothesis"></div><div id="alts" class="alternative-grid"></div></section>
