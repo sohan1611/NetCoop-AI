@@ -80,6 +80,7 @@ Priority = ours after verification (audit priority in brackets when changed).
 | NC-044 | P3 | S17: "evidence from unrelated devices/times" shown for single-device fixtures 02/11 (real reason: util missing/low); normal's "warning-grade devices" limitation leaked into every report (congestion 0.94) | Tested (T28: tests/test_qa_t28.py; S17 rerun) |
 | NC-045 | P3 | S17: T28 deleted the upload before `admit()`; a 429 then lost the user's file | Tested (T29: tests/test_qa_t29.py; S17 browser: reused upload_id → 404 after run) |
 | NC-046 | P3 | S17 live check: `nc_session` cookie set without `Secure` on the HTTPS deployment (Render terminates TLS, app saw http) | Tested (tests/test_qa_t29.py::test_nc046…; live re-check after deploy) |
+| NC-047 | P3 | S18 review of T30: device and edge scopes tied on score and the singleton won, dropping a directly linked neighbour with the same anomaly from evidence/affected_devices | Tested (scope tie-break prefers more anomalous devices; tests/test_correlator.py; 16 scenarios unchanged) |
 
 ### Independent re-audit of bc123e9 (docs/qa/NetCoop_AI_Reaudit_Oct31.md, local only) — verified in S17 on a clean checkout
 
@@ -134,6 +135,25 @@ T25 status: DONE. tests/test_api.py covers two-session isolation (list/stream/re
 T26 status: DONE. Browser-checked (375 px no overflow, no console errors besides a self-inflicted 429 from rapid test runs): fixture 08 upload chart ends 500 ms, normal not CRIT/Healthy, insufficient_data = Unknown/Unclassified, Acknowledge All then new run stays unacknowledged, fail-agent sent once then cleared. pytest 242 passed, evaluate 16/16. Not browser-tested: SSE retry/poll (NC-019) and samples pagination (NC-022) beyond code/test review.
 
 T27 status: DONE. All 117 matrix checks executed (Result column filled, 117/117 Pass after NC-034..NC-041 fixes); every tracker row is Tested or Rejected. pytest 247 passed, evaluate 16/16, hostile_inputs/stress_test no CRASH. Not covered: real print dialog render, screen reader, light-theme contrast (no light theme), live Render/Vercel deployment (local build only).
+
+### Third independent re-audit of 11eb2a1 (docs/qa/NetCoop_AI_Third_Independent_Reaudit.md, local only) — verified in S18 at HEAD 11eb2a1
+
+Supplied pack: 8 fixtures `tests/fixtures/qa/R3-*.json` + `tests/test_r3_external_audit.py` (read before running; 5 of 7 fail at 11eb2a1).
+
+| ID | Pri | Verdict + evidence (S18) | Status |
+|---|---|---|---|
+| R3-01 | P1 | Confirmed: 09:02:00 + 09:05:59 (239 s) share no bucket (supplied test fails). Fixed-width 300 s buckets cannot join every pair <= 300 s without a 600 s spread (RQA-03), so a true sliding window is needed | Tested (T30; S18: 239 s pair joins → 0.95 like the 150 s control; boundary tests 149–300 s join / 301 s not at 5 phases; fixture 14 still 0.299; 4000 samples 0.21 s) |
+| R3-02 | P1 | Confirmed end to end: star CORE→AP-A/AP-B, util on AP-A + latency on AP-B → **congestion 0.829** (domain rule over latency_degradation 0.97); AP-B alone → latency_degradation 0.97. NC-001 via hub scope | Tested (T30; S18: R3-02 → latency_degradation 0.97 on AP-B, no sibling congestion; 16 scenarios identical to HEAD) |
+| R3-03 | P2 [P1] | Confirmed: cli.py `passed*4 >= len*3` exits 0 at 75 %. Was the T11 gate (>= 12/13); misleading now, no runtime impact | Tested (T31: strict exit, --min-pass-rate) |
+| R3-04 | P2 | Confirmed: `collected_at`/`collectedAt` conflict is last-write-wins (supplied test fails) | Tested (T31; S18: both key orders → identical insufficient_evidence 0.1104 + ambiguity issue) |
+| R3-05 | P2 | Confirmed: critical 09:00, healthy 09:58, collected 10:00 → latency_degradation 0.95, no temporal note (latest sample alone → normal 0.9) | Tested (T30 "historical:" note + T31 UI; S18 browser: "Recovered — historical incident" / Resolved, excluded from CRIT) |
+| R3-06 | P2 | Confirmed: unparseable `collected_at` raises no issue (supplied test fails) | Tested (T31: invalid collected_at issue) |
+| R3-07 | P3 [P2] | Partially: conflict is disclosed (supplied test passes, hardware_failure 0.504), but the conflicting `down` still triggers the "device reported down" domain override | Tested (T30; S18: R3-08 → insufficient_evidence 0.299, no "device reported down" override) |
+| R3-08 | P2 | Plausible, deployment-dependent (Vercel/Render proxies; cannot verify the effective client address safely). Fixed defensively: per-session quota + higher per-IP cap | Tested (T31: per-session 10/min + per-IP 60/min, tests) |
+| R3-09 | P2 | Confirmed: 1.43 MB input → 18.3 MB run dir (12.8×: messages.jsonl 11.6 MB, state.json 6.6 MB); no cap on stored runs | Tested (T31; S18: run dir 4.5× input, was 12.8×; stored runs capped at 100; UI samples + summaries OK) |
+| R3-10 | P3 [P2/P3] | True (cooperative `wait_for`), but runs execute in worker threads and inputs are capped. Accepted: documented, no redesign | Accepted (README documents cooperative timeout; T31) |
+| R3-11 | P3 | Confirmed: README says 20 files / 25 MB (code: 200 / 100 MB, 5 pending per session) | Tested (T31 README limits) |
+| R3-12 | — | Demo video placeholder = T22 (not a code defect) | T22 |
 
 ## Live deployment check (S17, 2026-10-31)
 

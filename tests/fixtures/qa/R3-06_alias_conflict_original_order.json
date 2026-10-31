@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "R3-06",
+  "collected_at": "2026-10-31T09:02:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "A",
+      "status": "up"
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "A",
+      "timestamp": "2026-10-31T09:01:00Z",
+      "latency_ms": 12,
+      "jitter_ms": 1
+    }
+  ],
+  "services": [],
+  "symptoms": [],
+  "collectedAt": "2026-10-31T12:00:00Z"
+}

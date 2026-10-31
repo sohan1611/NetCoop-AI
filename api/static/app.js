@@ -74,7 +74,7 @@ function renderTopBar() {
   $('campus-subtitle').textContent = 'Campus Core Grid • ' + (state.report?.incident_id || 'idle');
 }
 function renderSidebar() {
-  const critical = state.runs?.filter((r) => isFault(r) && r.confidence >= 0.75 &&
+  const critical = state.runs?.filter((r) => isFault(r) && !r.recovered && r.confidence >= 0.75 &&
     !state.acknowledged.has(incidentKey(r)));
   $('critical-badge').hidden = !critical?.length;
   $('critical-badge').textContent = critical ? critical.length + '\nCRIT' : '—';
@@ -123,8 +123,10 @@ function renderHero() {
   $('hero-stats').classList.toggle('is-idle', !state.runId && !state.running);
   const normalWarning = r?.status === 'diagnosed' && r.cause === 'normal' &&
     (r.confidence < 0.75 || (r.limitations || []).some((item) => item.startsWith('warning-grade devices')));
+  const recovered = (r?.limitations || []).some((item) => item.startsWith('historical: '));
   let health = '—', tone = '';
   if (inputRejected()) { health = 'Unknown — input rejected'; tone = 'muted'; }
+  else if (recovered) { health = 'Recovered — historical incident'; tone = 'flagged'; }
   else if (r?.status === 'diagnosed' && r.cause === 'normal') {
     health = normalWarning ? 'Normal with warnings' : 'Healthy';
     tone = normalWarning ? 'flagged' : 'complete';
@@ -155,8 +157,8 @@ function renderHero() {
   const medium = r?.confidence_category === 'medium';
   const low = ['low', 'insufficient'].includes(r?.confidence_category);
   const unclassified = r && !isFault(r) && r.cause !== 'normal';
-  severity.textContent = normalWarning ? 'Watch' : unclassified ? 'Unclassified' : high ? 'P1 CRIT' : medium ? 'P2' : low ? 'P3' : '—';
-  severity.className = 'pill ' + (high ? 'alert' : normalWarning || medium ? 'flagged' : '');
+  severity.textContent = recovered ? 'Resolved' : normalWarning ? 'Watch' : unclassified ? 'Unclassified' : high ? 'P1 CRIT' : medium ? 'P2' : low ? 'P3' : '—';
+  severity.className = 'pill ' + (recovered ? 'flagged' : high ? 'alert' : normalWarning || medium ? 'flagged' : '');
 }
 // SSE is the live source; /details replaces these projections after the run ends.
 function liveAgent(name) {
@@ -427,8 +429,8 @@ function summarize(msg) {
   const p = msg.payload || {};
   if (msg.type === 'TASK') {
     if (['performance', 'infrastructure', 'connectivity'].includes(msg.recipient)) {
-      return 'analyze ' + (Array.isArray(p.telemetry?.devices) ? counted(p.telemetry.devices.length, 'device') : '— devices') +
-        ' / ' + (Array.isArray(p.telemetry?.samples) ? counted(p.telemetry.samples.length, 'sample') : '— samples');
+      return 'analyze ' + (Array.isArray(p.telemetry?.devices) ? counted(p.telemetry.devices.length, 'device') : counted(p.telemetry?.devices, 'device')) +
+        ' / ' + (Array.isArray(p.telemetry?.samples) ? counted(p.telemetry.samples.length, 'sample') : counted(p.telemetry?.samples, 'sample'));
     }
     if (msg.recipient === 'correlator') {
       const count = Array.isArray(p.findings) ? p.findings.length :

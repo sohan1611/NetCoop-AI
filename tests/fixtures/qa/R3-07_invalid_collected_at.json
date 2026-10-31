@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "R3-07",
+  "collected_at": "not-an-ISO-time",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "A",
+      "status": "up"
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "A",
+      "timestamp": "2026-10-31T09:01:00Z",
+      "latency_ms": 250,
+      "jitter_ms": 55
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

@@ -34,7 +34,7 @@ def test_rqa03_ten_minute_bridge_does_not_corroborate(tmp_path):
     assert report["confidence"] <= 0.5
 
 
-def test_rqa01_rqa03_bucket_families_and_supported_scopes():
+def test_rqa01_rqa03_exact_windows_and_supported_scopes():
     reference = datetime(2026, 10, 31, 9, tzinfo=timezone.utc)
     rows = [dict(device_id="A", timestamp=(reference + timedelta(seconds=s)).isoformat(),
                  latency_ms=250 if s < 600 else 10) for s in (149, 150, 299, 300, 600)]
@@ -42,9 +42,12 @@ def test_rqa01_rqa03_bucket_families_and_supported_scopes():
                      services=[], samples=rows + [dict(device_id="A", jitter_ms=55)],
                      topology={"nodes": [], "links": []})
     scopes = list(_local_scopes(telemetry, {"A"}, SIGNATURES["latency_degradation"]))
-    assert any(rows[0] in s["samples"] and rows[2] in s["samples"] for s in scopes)
-    assert any(rows[1] in s["samples"] and rows[3] in s["samples"] for s in scopes)
-    assert not any(rows[4] in s["samples"] for s in scopes)  # Healthy-only buckets skipped.
+    # Equal pre-scores retain only the three latest anchored windows. A healthy
+    # row can join a supported window at its inclusive 300-second boundary.
+    timed_scopes = [s for s in scopes if any("timestamp" in row for row in s["samples"])]
+    assert [s["samples"] for s in timed_scopes] == [
+        [rows[3], rows[4]], [rows[2], rows[3]], [rows[1], rows[2], rows[3]],
+    ]
     assert any(s["samples"] == [telemetry["samples"][-1]] and not s["devices"] for s in scopes)
     for scope in scopes:
         timed = [datetime.fromisoformat(row["timestamp"]).timestamp()

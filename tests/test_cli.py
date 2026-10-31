@@ -54,7 +54,7 @@ def test_evaluate(capsys):
     print(output)
     passed, total = map(int, output.strip().splitlines()[-1].split()[0].split('/'))
     assert total == 16
-    assert passed >= 12
+    assert passed == total
     assert all(name in output for name in json.loads(
         (SCENARIOS / 'labels.json').read_text(encoding='utf-8')))
 

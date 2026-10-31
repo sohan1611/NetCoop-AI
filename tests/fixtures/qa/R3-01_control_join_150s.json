@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "R3-01-CONTROL",
+  "collected_at": "2026-10-31T09:07:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "A",
+      "status": "up"
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "A",
+      "timestamp": "2026-10-31T09:02:30Z",
+      "latency_ms": 250
+    },
+    {
+      "device_id": "A",
+      "timestamp": "2026-10-31T09:05:00Z",
+      "jitter_ms": 55
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

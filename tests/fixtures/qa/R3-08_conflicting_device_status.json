@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "R3-08",
+  "collected_at": "2026-10-31T09:07:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "A",
+      "status": "up",
+      "cpu_pct": 20,
+      "mem_pct": 30,
+      "interface_errors": 0
+    },
+    {
+      "device_id": "A",
+      "status": "down",
+      "cpu_pct": 98,
+      "mem_pct": 99,
+      "interface_errors": 15
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "A",
+      "timestamp": "2026-10-31T09:01:00Z",
+      "latency_ms": 280,
+      "jitter_ms": 60,
+      "packet_loss_pct": 10
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

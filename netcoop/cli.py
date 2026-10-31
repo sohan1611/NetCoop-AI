@@ -54,7 +54,9 @@ def _print_report(report: Report, markdown: bool = False) -> int:
 
 
 def _evaluate(directory: Path, no_llm: bool = True,
-              output_path: Path | None = None) -> int:
+              output_path: Path | None = None, min_pass_rate: float = 1.0) -> int:
+    if not 0 <= min_pass_rate <= 1:
+        raise ValueError('min-pass-rate must be between 0 and 1')
     labels = json.loads((directory / 'labels.json').read_text(encoding='utf-8'))
     lines = ['| scenario | expected | got | confidence | pass |',
              '| --- | --- | --- | --- | --- |']
@@ -74,7 +76,7 @@ def _evaluate(directory: Path, no_llm: bool = True,
     if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(table, encoding='utf-8')
-    return 0 if labels and passed * 4 >= len(labels) * 3 else 1
+    return 0 if labels and passed / len(labels) >= min_pass_rate else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -89,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     evaluate = commands.add_parser('evaluate')
     evaluate.add_argument('--dir', type=Path, default=Path('data/scenarios'))
     evaluate.add_argument('--no-llm', action='store_true')
+    evaluate.add_argument('--min-pass-rate', type=float, default=1.0)
     for name in ('resume', 'remediate'):
         command = commands.add_parser(name)
         command.add_argument('run_id')
@@ -102,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     try:
         if args.command == 'evaluate':
-            return _evaluate(args.dir, no_llm=args.no_llm)
+            return _evaluate(args.dir, no_llm=args.no_llm, min_pass_rate=args.min_pass_rate)
         if args.command == 'diagnose':
             raw = args.file.read_text(encoding='utf-8')
             runner = build_orchestrator(args.runs_dir, set(args.fail_agent), no_llm=args.no_llm)

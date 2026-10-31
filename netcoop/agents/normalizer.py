@@ -691,10 +691,19 @@ def _optional_section(source: dict[str, Any], section: str,
 
 def _normalize_canonical(source: dict[str, Any], tracker: _QualityTracker) -> dict[str, Any]:
     normalized_source: dict[str, Any] = {}
-    for key, value in source.items():
+    for key, value in sorted(source.items(), key=lambda item: (item[0] in TOP_LEVEL_ALIASES, item[0])):
         target = TOP_LEVEL_ALIASES.get(key, key)
         if target not in TOP_LEVEL_FIELDS:
             tracker.add("unknown", f"unknown field root.{key} dropped")
+        elif target in normalized_source:
+            chosen = normalized_source[target]
+            same = chosen == value
+            if target == "collected_at":
+                a, b = _parse_timestamp(chosen), _parse_timestamp(value)
+                same = same or (a is not None and b is not None and a == b)
+            if not same:
+                tracker.add("wrong_type", f"ambiguous top-level aliases: {target} vs {key} "
+                            f"({chosen} vs {value}); canonical value used")
         else:
             normalized_source[target] = value
 
@@ -747,8 +756,9 @@ def _normalize_canonical(source: dict[str, Any], tracker: _QualityTracker) -> di
         tracker.add("wrong_type", "wrong type for root.incident_id; expected a string")
         incident_id = "UNKNOWN"
     collected_at = normalized_source.get("collected_at")
-    if collected_at is not None and not isinstance(collected_at, str):
-        tracker.add("wrong_type", "wrong type for root.collected_at; expected a string")
+    if "collected_at" in normalized_source and _parse_timestamp(collected_at) is None:
+        tracker.add("wrong_type", f"invalid collected_at '{collected_at}'; "
+                    "using newest sample time as reference")
         collected_at = None
     return {
         "schema_version": "1.0",

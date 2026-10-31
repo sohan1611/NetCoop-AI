@@ -67,7 +67,7 @@ def test_nc003_signature_requires_same_time_bucket(minutes, tmp_path):
     context = _RunContext("time", "orchestrator", {}, telemetry, [], 2)
     result = _score(context)
     congestion = next(item for item in result.ordered if item.cause == "congestion")
-    if minutes <= 2:
+    if minutes <= 5:
         assert congestion.observations["link_utilization_pct"].grade == 1
         assert congestion.observations["latency_ms"].grade == 1
     else:

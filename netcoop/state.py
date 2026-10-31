@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class RunState(BaseModel):
@@ -20,13 +20,22 @@ class RunState(BaseModel):
     limitations: list[str] = Field(default_factory=list)
     rounds: int = 0
 
+    @model_validator(mode="after")
+    def restore_normalizer_telemetry(self) -> "RunState":
+        normalizer = self.findings.get("normalizer")
+        if self.telemetry is not None and isinstance(normalizer, dict):
+            normalizer.setdefault("telemetry", self.telemetry)
+        return self
+
     def save(self, runs_dir: str | Path = "runs") -> Path:
         """Write this checkpoint to ``runs/<run_id>/state.json``."""
 
         run_dir = Path(runs_dir) / self.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         path = run_dir / "state.json"
-        path.write_text(self.model_dump_json(indent=2), encoding="utf-8")
+        path.write_text(self.model_dump_json(
+            exclude={"findings": {"normalizer": {"telemetry"}}}
+        ), encoding="utf-8")
         return path
 
     @classmethod

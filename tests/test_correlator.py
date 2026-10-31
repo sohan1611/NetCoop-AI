@@ -192,6 +192,7 @@ def test_supporting_evidence_deduplicates_metric_device_value():
     )
     selected, _ = CorrelatorAgent()._supporting_evidence(context, _score(context).winner)
     latency = [item for item in selected if item['metric'] == 'latency_ms']
+    # r2 is directly linked with the same anomaly, so the edge scope wins the tie (NC-047).
     assert [(item['device_id'], item['value']) for item in latency] == [
         ('r1', 185), ('r2', 185), ('r1', 200),
     ]

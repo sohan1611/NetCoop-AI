@@ -27,11 +27,11 @@ def test_evaluate_script_runs_and_passes(tmp_path):
         assert cells[4] == str(cells[1] == cells[2])
     passed, total = map(int, result.stdout.splitlines()[-1].split()[0].split('/'))
     assert total == len(labels)
-    assert passed * 4 >= total * 3
+    assert passed == total
     assert (ROOT / 'runs' / 'evaluation.md').read_text(encoding='utf-8') == result.stdout
 
 
-@pytest.mark.parametrize('matches, expected_code', [(2, 1), (3, 0)])
+@pytest.mark.parametrize('matches, expected_code', [(2, 1), (3, 1), (4, 0)])
 def test_evaluation_accuracy_gate(matches, expected_code, tmp_path, capsys):
     labels = {f'case_{i}': 'normal' if i < matches else 'congestion' for i in range(4)}
     raw = (SCENARIOS / 'normal.json').read_text(encoding='utf-8')

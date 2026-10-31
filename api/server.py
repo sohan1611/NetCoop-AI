@@ -41,7 +41,9 @@ MAX_PENDING_UPLOADS = 5
 MAX_UPLOAD_FILES = 200
 MAX_UPLOAD_TOTAL_BYTES = 100_000_000
 MAX_CONCURRENT_RUNS = 2
-RATE_LIMIT = 10  # runs per client IP per RATE_WINDOW_S
+RATE_LIMIT = 10  # runs/uploads per session per RATE_WINDOW_S
+IP_RATE_LIMIT = 60
+MAX_STORED_RUNS = 100
 RATE_WINDOW_S = 60
 RUN_LIST_LIMIT = 20
 
@@ -88,9 +90,10 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
     tasks: dict[str, asyncio.Task] = {}
     finished_at: dict[str, float] = {}
     started = time.monotonic()
-    hit_log: dict[str, deque] = {}
-    upload_hit_log: dict[str, deque] = {}
+    hit_log: dict[tuple[str, str], deque] = {}
+    upload_hit_log: dict[tuple[str, str], deque] = {}
     active = [0]
+    running_ids: set[str] = set()
 
     def safe(value: str) -> str:
         if not _ID.match(value) or value.startswith('.') or value == 'labels':
@@ -113,6 +116,7 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
         directory = runs / run_id
         directory.mkdir(parents=True, exist_ok=True)
         (directory / 'owner.txt').write_text(session, encoding='utf-8')
+        running_ids.add(run_id)
 
     async def finished(run_id: str) -> None:
         task = tasks.get(run_id)
@@ -124,14 +128,23 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
         # otherwise freeze the API loop (and every SSE stream with it).
         return asyncio.run(build_orchestrator(runs, fail, no_llm=True).run(raw, run_id=run_id))
 
-    def rate_limit(request: Request, history: dict[str, deque], kind: str) -> None:
+    def rate_limit(request: Request, history: dict[tuple[str, str], deque], kind: str) -> None:
         now = time.monotonic()
-        hits = history.setdefault(request.client.host if request.client else '?', deque())
-        while hits and now - hits[0] > RATE_WINDOW_S:
-            hits.popleft()
-        if len(hits) >= RATE_LIMIT:
-            raise HTTPException(429, f'too many {kind}; retry in a minute', headers={'Retry-After': '60'})
-        hits.append(now)
+        buckets = [
+            (('session', request.state.session), RATE_LIMIT),
+            (('ip', request.client.host if request.client else '?'), IP_RATE_LIMIT),
+        ]
+        pending = []
+        for key, limit in buckets:
+            hits = history.setdefault(key, deque())
+            while hits and now - hits[0] > RATE_WINDOW_S:
+                hits.popleft()
+            if len(hits) >= limit:
+                raise HTTPException(429, f'too many {kind}; retry in a minute',
+                                    headers={'Retry-After': '60'})
+            pending.append(hits)
+        for hits in pending:
+            hits.append(now)
 
     def admit(request: Request) -> None:
         """Check concurrency before recording an admitted run's rate-limit hit."""
@@ -159,13 +172,27 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
                 if entry.name == 'uploads' and parent == runs:
                     continue
                 task = tasks.get(entry.name)
-                if task is not None and not task.done():
+                if entry.name in running_ids or (task is not None and not task.done()):
                     continue
                 try:
                     if entry.stat().st_mtime < cutoff:
                         shutil.rmtree(entry) if entry.is_dir() else entry.unlink()
                 except OSError:
                     pass
+
+        entries = [e for e in runs.iterdir() if e.is_dir() and e.name != 'uploads']
+        finished_entries = sorted(
+            (e for e in entries if e.name not in running_ids
+             and (e.name not in tasks or tasks[e.name].done())),
+            key=lambda e: e.stat().st_mtime,
+        )
+        for entry in finished_entries[:max(0, len(entries) - MAX_STORED_RUNS)]:
+            try:
+                shutil.rmtree(entry)
+                tasks.pop(entry.name, None)
+                finished_at.pop(entry.name, None)
+            except OSError:
+                pass
 
     async def execute(raw: str, run_id: str, fail: set[str]) -> None:
         try:
@@ -175,7 +202,9 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
             (runs / run_id / 'fatal.txt').write_text(str(exc), encoding='utf-8')
         finally:
             finished_at[run_id] = time.monotonic()
+            running_ids.discard(run_id)
             release()
+            cleanup()
 
     @app.get('/api/scenarios')
     def list_scenarios() -> list[dict]:
@@ -243,6 +272,7 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
                 path.unlink()
                 path.with_suffix('.owner').unlink(missing_ok=True)
         except OSError:
+            running_ids.discard(run_id)
             release()
             raise
         tasks[run_id] = asyncio.create_task(execute(raw, run_id, fail))
@@ -332,6 +362,7 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
 
     @app.get('/api/runs')
     async def list_runs(request: Request) -> list[dict]:
+        cleanup()
         rows = []
         if not runs.is_dir():
             return rows
@@ -350,6 +381,8 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
                 rows.append({'run_id': entry.name, 'incident_id': data.get('incident_id'),
                              'cause': data.get('cause') or data.get('status'),
                              'status': data.get('status'), 'confidence': data.get('confidence'),
+                             'recovered': any(item.startswith('historical: ')
+                                              for item in data.get('limitations', [])),
                              'created_at': created})
             elif (task is not None or any((entry / name).is_file()
                                          for name in ('state.json', 'fatal.txt', 'messages.jsonl'))):
@@ -357,7 +390,7 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
                 rows.append({'run_id': entry.name, 'incident_id': None,
                              'cause': None if running else 'error',
                              'status': 'running' if running else 'error',
-                             'confidence': None, 'created_at': created})
+                             'confidence': None, 'recovered': False, 'created_at': created})
         return rows
 
     @app.get('/api/playbook')
@@ -372,7 +405,11 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
                 'limits': {'max_upload_mb': MAX_UPLOAD_BYTES // 1_000_000, 'max_devices': MAX_DEVICES,
                            'max_samples': MAX_SAMPLES, 'max_nodes': MAX_NODES,
                            'max_links': MAX_LINKS, 'max_services': MAX_SERVICES,
-                           'runs_per_min': RATE_LIMIT}}
+                           'runs_per_min': RATE_LIMIT, 'runs_per_min_per_session': RATE_LIMIT,
+                           'runs_per_min_per_ip': IP_RATE_LIMIT,
+                           'uploads_per_min_per_session': RATE_LIMIT,
+                           'uploads_per_min_per_ip': IP_RATE_LIMIT,
+                           'max_stored_runs': MAX_STORED_RUNS}}
 
     @app.get('/api/runs/{run_id}/topology')
     async def topology(run_id: str, request: Request) -> dict:
@@ -410,7 +447,11 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
             raise HTTPException(409, 'cannot remediate: run has no usable diagnosis')
         new_id = uuid4().hex[:12]
         create_run(new_id, session)
-        result = await asyncio.to_thread(run_sync, patched, new_id, set())
+        try:
+            result = await asyncio.to_thread(run_sync, patched, new_id, set())
+        finally:
+            running_ids.discard(new_id)
+            cleanup()
         after = _cause(result, _report(result))
         return {'before': before, 'after': after, 'verified': after == 'normal', 'run_id': new_id}
 

@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "R3-02-SIBLINGS",
+  "collected_at": "2026-10-31T09:07:00Z",
+  "topology": {
+    "nodes": [
+      {
+        "id": "CORE",
+        "type": "switch",
+        "role": "core"
+      },
+      {
+        "id": "AP-A",
+        "type": "ap",
+        "role": "access"
+      },
+      {
+        "id": "AP-B",
+        "type": "ap",
+        "role": "access"
+      }
+    ],
+    "links": [
+      {
+        "src": "CORE",
+        "dst": "AP-A"
+      },
+      {
+        "src": "CORE",
+        "dst": "AP-B"
+      }
+    ]
+  },
+  "devices": [
+    {
+      "device_id": "AP-A",
+      "status": "up",
+      "queue_drops": 0,
+      "cpu_pct": 20,
+      "mem_pct": 20
+    },
+    {
+      "device_id": "AP-B",
+      "status": "up",
+      "queue_drops": 150,
+      "cpu_pct": 20,
+      "mem_pct": 20
+    },
+    {
+      "device_id": "CORE",
+      "status": "up",
+      "queue_drops": 0,
+      "cpu_pct": 20,
+      "mem_pct": 20
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "AP-A",
+      "timestamp": "2026-10-31T09:05:00Z",
+      "link_utilization_pct": 97,
+      "jitter_ms": 1,
+      "packet_loss_pct": 0
+    },
+    {
+      "device_id": "AP-B",
+      "timestamp": "2026-10-31T09:05:00Z",
+      "latency_ms": 320,
+      "jitter_ms": 55,
+      "packet_loss_pct": 5
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

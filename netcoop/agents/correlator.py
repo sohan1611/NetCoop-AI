@@ -18,6 +18,7 @@ by ``correlation_id``; after two rounds the agent always returns a FINDING.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from statistics import median
@@ -227,10 +228,13 @@ def _rows_for_metric(
 
 def _device_down(telemetry: dict[str, Any]) -> bool:
     devices = telemetry.get("devices")
-    return isinstance(devices, list) and any(
-        isinstance(row, dict) and str(row.get("status", "")).lower() == "down"
-        for row in devices
-    )
+    if not isinstance(devices, list):
+        return False
+    statuses: dict[str | None, set[str]] = {}
+    for row in devices:
+        if isinstance(row, dict) and isinstance(row.get("status"), str):
+            statuses.setdefault(row.get("device_id"), set()).add(row["status"].lower())
+    return any(values == {"down"} for values in statuses.values())
 
 
 def _graded_rows(
@@ -358,22 +362,24 @@ def _instant(value: Any) -> float | None:
 def _local_scopes(
     telemetry: dict[str, Any], active: set[str], signature: list[tuple[str, float]]
 ):
-    """Join direct neighbours in the same 5-minute bucket.
+    """Score exact, inclusive 300-second windows on devices and topology edges.
 
-    Tumbling and 150-second-offset families guarantee a shared scope for rows
-    at most 150 seconds apart, without joining rows over 300 seconds apart.
-    Index each location once per signature and score only supported buckets.
-    Device/service snapshots join the reference instant's buckets; samples
-    without timestamps join only other untimed rows.
+    Each active device and each edge with an active endpoint is a location.
+    Sort its timed rows once, then use two pointers and per-metric monotonic
+    deques to pre-score [t, t+300] and [t-300, t] at every supported row in
+    linear time. Emit the top three windows per location, latest first on
+    equal scores. Every pair <= 300 seconds has a candidate window; no scope
+    spans more than 300 seconds. Device/service snapshots join only windows
+    containing the reference instant; untimed samples join only untimed rows.
     """
     sections = ("devices", "samples", "services")
-    indexed: dict[str, dict[str, list[tuple[float | None, dict, bool]]]] = {}
+    indexed: dict[str, list[tuple[float | None, str, dict, tuple[float, ...]]]] = {}
     reference = _instant(telemetry.get("collected_at"))
     if reference is None:
         reference = max((stamp for row in telemetry.get("samples", [])
                          if (stamp := _instant(row.get("timestamp"))) is not None), default=None)
     for section in sections:
-        metrics = [metric for metric, _ in signature
+        metrics = [(i, metric) for i, (metric, _) in enumerate(signature)
                    if ("services" if _service_parts(metric) is not None else
                        "devices" if metric in _DEVICE_METRICS else "samples") == section]
         for row in telemetry.get(section, []):
@@ -381,38 +387,75 @@ def _local_scopes(
             if not isinstance(device, str):
                 continue
             stamp = _instant(row.get("timestamp")) if section == "samples" else reference
-            supported = any(grade > 0 for metric in metrics
-                            for grade, _ in _graded_rows({section: [row]}, metric, False))
-            indexed.setdefault(device, {}).setdefault(section, []).append((stamp, row, supported))
+            grades = [0.0] * len(signature)
+            for i, metric in metrics:
+                grades[i] = max((grade for grade, _ in
+                                 _graded_rows({section: [row]}, metric, False)), default=0.0)
+            indexed.setdefault(device, []).append((stamp, section, row, tuple(grades)))
     topology = telemetry.get("topology", {})
     declared = {node.get("id") for node in topology.get("nodes", [])}
-    neighbors: dict[str, set[str]] = {}
+    locations = {frozenset({device}) for device in active}
     for link in topology.get("links", []):
         src, dst = link.get("src"), link.get("dst")
-        if src in declared and dst in declared:
-            neighbors.setdefault(src, set()).add(dst)
-            neighbors.setdefault(dst, set()).add(src)
-    centers = active | {neighbor for device in active for neighbor in neighbors.get(device, ())}
-    seen: set[frozenset[str]] = set()
-    for center in sorted(centers):
-        location = frozenset({center, *neighbors.get(center, ())})
-        if location in seen:
-            continue
-        seen.add(location)
-        buckets: dict[tuple[int, int] | None, dict[str, list[dict]]] = {}
-        supported_buckets = set()
+        if src in declared and dst in declared and (src in active or dst in active):
+            locations.add(frozenset({src, dst}))
+    for location in sorted(locations, key=lambda item: tuple(sorted(item))):
+        timed = []
+        untimed = {name: [] for name in sections}
+        untimed_supported = False
         for device in sorted(location):
-            for section, rows in indexed.get(device, {}).items():
-                for stamp, row, supported in rows:
-                    keys = (None,) if stamp is None else (
-                        (0, int(stamp // 300)), (1, int((stamp + 150) // 300)))
-                    for key in keys:
-                        buckets.setdefault(key, {name: [] for name in sections})[section].append(row)
-                        if supported:
-                            supported_buckets.add(key)
-        for key, rows in buckets.items():
-            if key in supported_buckets:
-                yield {**telemetry, **rows}
+            for stamp, section, row, grades in indexed.get(device, []):
+                if stamp is None:
+                    untimed[section].append(row)
+                    untimed_supported |= any(grades)
+                else:
+                    timed.append((stamp, section, row, grades))
+        timed.sort(key=lambda item: item[0])
+        anchors = []
+        for stamp, _, _, grades in timed:
+            if any(grades) and (not anchors or anchors[-1] != stamp):
+                anchors.append(stamp)
+        # Merge the two sorted streams of starts without sorting 2N windows.
+        forward = backward = left = right = 0
+        maxima = [deque() for _ in signature]
+        top = []
+        previous = None
+        while forward < len(anchors) or backward < len(anchors):
+            if backward == len(anchors) or (forward < len(anchors)
+                    and anchors[forward] <= anchors[backward] - 300):
+                start = anchors[forward]
+                forward += 1
+            else:
+                start = anchors[backward] - 300
+                backward += 1
+            if start == previous:
+                continue
+            previous = start
+            end = start + 300
+            while right < len(timed) and timed[right][0] <= end:
+                for i, grade in enumerate(timed[right][3]):
+                    queue = maxima[i]
+                    while queue and queue[-1][1] <= grade:
+                        queue.pop()
+                    queue.append((right, grade))
+                right += 1
+            while left < right and timed[left][0] < start:
+                left += 1
+            for queue in maxima:
+                while queue and queue[0][0] < left:
+                    queue.popleft()
+            pre_score = sum(weight * (queue[0][1] if queue else 0.0)
+                            for (_, weight), queue in zip(signature, maxima))
+            top.append((pre_score, start, left, right))
+            top.sort(reverse=True)
+            del top[3:]
+        for _, _, left, right in top:
+            rows = {name: [] for name in sections}
+            for _, section, row, _ in timed[left:right]:
+                rows[section].append(row)
+            yield {**telemetry, **rows}
+        if untimed_supported:
+            yield {**telemetry, **untimed}
 
 
 def _hypothesis_scores(finding: dict[str, Any]) -> dict[str, float]:
@@ -566,13 +609,19 @@ def _candidate(
             for grade, device in _graded_rows(telemetry, metric, critical_status)
             if grade > 0 and device is not None
         }
-        best = None
+        best = best_key = None
         for scope in _local_scopes(telemetry, active, signature):
             item = _candidate(cause, scope, findings, dq_factor, quality_issues, tops,
                               _device_down(scope), local=False)
             item.telemetry = scope
-            if best is None or (item.rank, item.coverage) > (best.rank, best.coverage):
-                best = item
+            # On equal scores prefer the edge scope with more anomalous devices,
+            # so a linked neighbour with the same fault stays in affected_devices.
+            spread = len({device for metric, _ in signature
+                          for grade, device in _graded_rows(scope, metric, critical_status)
+                          if grade > 0 and device is not None})
+            key = (item.rank, item.coverage, spread)
+            if best is None or key > best_key:
+                best, best_key = item, key
         if best is not None:
             candidate = best
         global_support = sum(item.grade > 0 for item in observations.values())
@@ -725,6 +774,64 @@ def _score(context: _RunContext) -> _ScoreResult:
         resolution=resolution,
         unresolved_conflict=unresolved,
     )
+
+
+def _historical_limitations(
+    telemetry: dict[str, Any], winner: _Candidate, affected: list[str]
+) -> list[str]:
+    """Qualify past anomalies when the latest accepted sample has recovered."""
+    if winner.cause == "normal" or not affected:
+        return []
+    signature = SIGNATURES[winner.cause]
+    reference = _instant(telemetry.get("collected_at"))
+    if reference is None:
+        reference = max((stamp for row in telemetry.get("samples", [])
+                         if (stamp := _instant(row.get("timestamp"))) is not None), default=None)
+    if reference is None:
+        return []
+    affected_set = set(affected)
+    newest_support: dict[str, float] = {}
+    scope = winner.telemetry or telemetry
+    for section in ("devices", "samples", "services"):
+        metrics = [metric for metric, _ in signature
+                   if ("services" if _service_parts(metric) is not None else
+                       "devices" if metric in _DEVICE_METRICS else "samples") == section]
+        for row in scope.get(section, []):
+            device = row.get("server_id" if section == "services" else "device_id")
+            stamp = _instant(row.get("timestamp")) if section == "samples" else reference
+            if device not in affected_set or stamp is None:
+                continue
+            if any(grade > 0 for metric in metrics
+                   for grade, _ in _graded_rows({section: [row]}, metric, False)):
+                newest_support[device] = max(newest_support.get(device, stamp), stamp)
+    latest: dict[str, tuple[float, list[dict]]] = {}
+    for row in telemetry.get("samples", []):
+        device = row.get("device_id")
+        stamp = _instant(row.get("timestamp"))
+        if (device not in newest_support or stamp is None
+                or not reference - 3600 <= stamp <= reference + 300):
+            continue
+        if device not in latest or stamp > latest[device][0]:
+            latest[device] = (stamp, [row])
+        elif stamp == latest[device][0]:
+            latest[device][1].append(row)
+    sample_metrics = [metric for metric, _ in signature
+                      if metric not in _DEVICE_METRICS and _service_parts(metric) is None]
+    limitations = []
+    for device in affected:
+        if device not in latest:
+            continue
+        stamp, rows = latest[device]
+        grades = [grade for metric in sample_metrics
+                  for grade, _ in _graded_rows({"samples": rows}, metric, False)]
+        if stamp > newest_support[device] and grades and not any(grades):
+            anomaly = datetime.fromtimestamp(newest_support[device], timezone.utc).isoformat().replace("+00:00", "Z")
+            recovered = datetime.fromtimestamp(stamp, timezone.utc).isoformat().replace("+00:00", "Z")
+            limitations.append(
+                f"historical: {device} anomaly at {anomaly}; latest sample "
+                f"{recovered} is healthy (recovered)"
+            )
+    return limitations
 
 
 def _evidence_key(payload: dict[str, Any]) -> tuple[str, ...]:
@@ -1087,6 +1194,7 @@ class CorrelatorAgent(Agent):
             if candidate.cause in visible_causes
             for limitation in candidate.limitations
         ]
+        candidate_limitations.extend(_historical_limitations(context.telemetry, winner, affected))
         conflicts = list(dict.fromkeys([*conflicts, *candidate_limitations]))
         finding = Finding(
             agent=self.name,

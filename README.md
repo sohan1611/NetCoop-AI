@@ -38,7 +38,7 @@ flowchart LR
 | Correlator | Scores competing hypotheses using all findings, resolves conflicts, sends QUERY messages for more data when unsure. |
 | Reporter | Final JSON + Markdown report, playbook actions, optional LLM narrative (never changes cause or confidence). |
 
-Orchestrator: per-agent timeout (10 s) and one retry; a failed agent is skipped and recorded as a limitation. State is checkpointed after each stage so a run can be resumed. Full design: [docs/PLAN.md](docs/PLAN.md).
+Orchestrator: cooperative per-agent timeout (10 s) and one retry; CPU-bound work is bounded by the input caps and is not pre-empted; a failed agent is skipped and recorded as a limitation. State is checkpointed after each stage so a run can be resumed. Full design: [docs/PLAN.md](docs/PLAN.md).
 
 ## Agent protocol
 JSON envelope `{msg_id, schema_version, type, sender, recipient, correlation_id, timestamp, payload}` with types `TASK`, `FINDING`, `QUERY`, `RESPONSE`, `ERROR`. Every field, unit and an example per type: [docs/PROTOCOL.md](docs/PROTOCOL.md). Models are pydantic v2 (`netcoop/protocol.py`); invalid messages are rejected into ERROR envelopes, never crash the run.
@@ -78,7 +78,7 @@ MCP tools: `list_scenarios`, `get_telemetry`, `diagnose`.
 ### Console UI
 Open http://127.0.0.1:8000 (or the live link above). Everything on the page comes from the API; nothing is hard-coded.
 - **Run:** *Trigger Swarm Diagnostic Run* runs the selected scenario (default `congestion`). *Spawn Agent Run* opens the run modal: pick a scenario or upload your own telemetry JSON (canonical, legacy v0 or the organizer's format), and optionally kill an agent (`fail infrastructure`, etc.) to watch the run degrade gracefully.
-- **Console view:** hero status cards, the 5-agent coordination pipeline with live status pills, the unified report (root cause, affected devices, evidence tiles with baselines, raw → normalized telemetry mapping, primary and alternative hypotheses, limitations, playbook actions), latency/loss/consensus cards, and the live agent message bus (SSE).
+- **Console view:** hero status cards, five pipeline agents plus the Reporter (six roles) in the coordination pipeline with live status pills, the unified report (root cause, affected devices, evidence tiles with baselines, raw → normalized telemetry mapping, primary and alternative hypotheses, limitations, playbook actions), latency/loss/consensus cards, and the live agent message bus (SSE).
 - **Other views:** Topology (affected nodes red, upstream root amber; click a node for its metrics), Incidents (all runs; click one to reopen it), Agent Pipeline (messages per agent), Telemetry Stream (full bus + normalized samples), Device Mesh, Automated Playbooks, CLI Terminal (type `help`), Telemetry Feeds / System Settings (API limits).
 - **Simulated fix:** *Apply Simulated Remediation* patches a copy of the telemetry, re-diagnoses and shows before → after with `verified: true/false`. Nothing touches real infrastructure.
 - **Export:** JSON (`/api/runs/<id>/report`), Markdown (`/report.md`) or *Print / Save PDF*, which uses a light print stylesheet that lists every telemetry row and the limitations.
@@ -90,9 +90,9 @@ Open http://127.0.0.1:8000 (or the live link above). Everything on the page come
 ## Tests
 ```bash
 pytest -q
-python scripts/evaluate.py
+python scripts/evaluate.py --no-llm
 ```
-`evaluate` runs every labelled scenario and prints expected vs. got, confidence and pass/fail. Current results: **288 tests pass** with `pip install -e ".[dev,mcp]"` (with only `.[dev]` the MCP tests are skipped), **evaluate 16/16**. `python scripts/stress_test.py` and `python scripts/hostile_inputs.py` throw malformed, hostile and oversized inputs at the pipeline and report any crash (none today). The full 117-check QA matrix (`docs/qa/TEST_MATRIX.md`, defects in `docs/QA_TRACKER.md`) was executed and passes; `PYTHONPATH=. python scripts/run_local_qa.py` replays the adversarial fixtures.
+`evaluate` runs every labelled scenario and prints expected vs. got, confidence and pass/fail. Success requires every label to pass; --min-pass-rate 0.75 explicitly enables a smoke threshold. Current results: **393 tests pass** with `pip install -e ".[dev,mcp]"` (with only `.[dev]` the MCP tests are skipped), **evaluate 16/16**. `python scripts/stress_test.py` and `python scripts/hostile_inputs.py` throw malformed, hostile and oversized inputs at the pipeline and report any crash (none today). The full 117-check QA matrix (`docs/qa/TEST_MATRIX.md`, defects in `docs/QA_TRACKER.md`) was executed and passes; `PYTHONPATH=. python scripts/run_local_qa.py` replays the adversarial fixtures.
 
 ## Submission checklist (problem statement §7)
 | Deliverable | Where |
@@ -110,8 +110,8 @@ In `data/scenarios/` (regenerate with `python scripts/gen_scenarios.py`): normal
 
 ## Security & robustness
 - **Privacy:** each browser gets an HttpOnly session cookie and only sees its own runs and uploads (other sessions get 404 for list, stream, report, details, topology and remediate); the event stream redacts raw input. Run IDs are not secrets, so this is a demo deployment: do not upload real campus data.
-- **Resource limits:** at most 2 concurrent runs and 10 runs per minute per IP (HTTP 429 beyond that); uploads are capped at 5 MB per file (413, enforced while streaming), 20 files / 25 MB in total, and rate-limited per IP; inputs over 25,000 devices, 50,000 samples, 200 nodes, 1,000 links or 200 services return an `input too large` error. Runs execute in worker threads so the API and SSE streams stay responsive.
-- **Cleanup:** run and upload folders (and finished task records) older than `NETCOOP_RUN_TTL_S` seconds (default 3600) are deleted on each new run.
+- **Resource limits:** at most 2 concurrent runs and 10 runs per minute per session and 60 per minute per IP (HTTP 429 beyond that); uploads are capped at 5 MB per file (413, enforced while streaming), 5 pending uploads per session, 200 files / 100 MB in total, and rate-limited to 10 uploads per minute per session and 60 per minute per IP; inputs over 25,000 devices, 50,000 samples, 200 nodes, 1,000 links or 200 services return an `input too large` error. Runs execute in worker threads so the API and SSE streams stay responsive.
+- **Cleanup:** run and upload folders (and finished task records) older than `NETCOOP_RUN_TTL_S` seconds (default 3600) are deleted on uploads, new runs and GET /api/runs. Stored runs are capped at 100 directories, deleting the oldest finished runs first and preserving running ones (TTL defaults to 1 h).
 - **Errors:** API responses use generic wording ("JSON nesting too deep", "number too large", "invalid JSON telemetry"); exception detail goes to server logs only.
 - **Headers:** `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and a CSP are set on every response; the cytoscape CDN script is pinned with an SRI hash.
 - **Diagnosis robustness:** alternatives that score higher than the chosen cause are kept and marked `overruled_by` the domain rule (never hidden); an unresolved agent conflict lists the leading hypotheses and reports insufficient evidence; `normal` is ineligible while any device is `down` or any metric is critical, and a down device is diagnosed as `hardware_failure` (or `interface_fault` when interface errors dominate) even without topology; the connectivity agent abstains when no topology or services are supplied; `NaN`/`Infinity`/`1e999` values are dropped as invalid. Checked by `scripts/stress_test.py` and `scripts/hostile_inputs.py` (no crashes; 20,000 healthy devices with a full metric set diagnose as `normal` in about 2 s).

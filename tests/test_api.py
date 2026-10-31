@@ -227,7 +227,7 @@ def test_runs_list_is_recent_first_and_capped(tmp_path):
     ids = [_finished_run(c) for _ in range(3)]
     rows = c.get('/api/runs').json()
     assert [r['run_id'] for r in rows[:3]] == ids[::-1]
-    assert set(rows[0]) == {'run_id', 'incident_id', 'cause', 'status', 'confidence', 'created_at'}
+    assert set(rows[0]) == {'run_id', 'incident_id', 'cause', 'status', 'confidence', 'created_at', 'recovered'}
     assert rows[0]['cause'] == 'congestion' and rows[0]['status'] == 'diagnosed'
     assert len(rows) <= 20
 
@@ -241,7 +241,10 @@ def test_playbook_and_health(tmp_path):
     assert health['version'] and health['uptime_s'] >= 0 and health['llm_enabled'] is False
     assert health['limits'] == {'max_upload_mb': 5, 'max_devices': 25000,
                                 'max_samples': 50000, 'max_nodes': 200, 'max_links': 1000,
-                                'max_services': 200, 'runs_per_min': 10}
+                                'max_services': 200, 'runs_per_min': 10,
+                                'runs_per_min_per_session': 10, 'runs_per_min_per_ip': 60,
+                                'uploads_per_min_per_session': 10, 'uploads_per_min_per_ip': 60,
+                                'max_stored_runs': 100}
 
 
 def test_report_markdown(tmp_path):

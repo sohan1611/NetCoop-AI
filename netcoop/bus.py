@@ -78,11 +78,28 @@ class MessageBus:
         return validated
 
     async def _emit(self, envelope: Envelope) -> None:
+        logged = envelope
+        if envelope.type in (MsgType.TASK, MsgType.QUERY):
+            def compact(value: Any) -> Any:
+                if isinstance(value, list):
+                    return [compact(item) for item in value]
+                if not isinstance(value, dict):
+                    return value
+                return {
+                    key: ({"telemetry_ref": "normalizer",
+                           "devices": len(item.get("devices", [])),
+                           "samples": len(item.get("samples", []))}
+                          if key == "telemetry" and isinstance(item, dict) else compact(item))
+                    for key, item in value.items()
+                }
+            # Reporter tasks nest the normalizer finding; routed queries also
+            # carry telemetry. Compact only the disk copy, preserving delivery.
+            logged = envelope.model_copy(update={"payload": compact(envelope.payload)})
         async with self._write_lock:
             run_dir = self.runs_dir / self.run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             with (run_dir / "messages.jsonl").open("a", encoding="utf-8") as stream:
-                stream.write(envelope.model_dump_json())
+                stream.write(logged.model_dump_json())
                 stream.write("\n")
             for queue in tuple(self._subscribers):
                 queue.put_nowait(envelope)
