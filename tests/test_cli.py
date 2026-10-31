@@ -86,3 +86,18 @@ def test_markdown(tmp_path, capsys):
     output = capsys.readouterr().out
     assert output.startswith('# Incident')
     assert 'congestion' in output
+
+
+def test_correlator_failure_degrades(tmp_path, capsys):
+    code, report = diagnose(tmp_path, capsys, '--fail-agent', 'correlator')
+    assert code == 0
+    assert report.status == 'insufficient_evidence'
+    assert any(item.startswith('correlator unavailable') for item in report.limitations)
+    assert report.affected_devices and report.supporting_evidence
+
+
+def test_reporter_failure_degrades(tmp_path, capsys):
+    code, report = diagnose(tmp_path, capsys, '--fail-agent', 'reporter')
+    assert code == 0
+    assert report.status == 'diagnosed'
+    assert any(item.startswith('reporter unavailable') for item in report.limitations)

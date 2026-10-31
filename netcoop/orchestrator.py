@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from netcoop.agents.base import Agent
 from netcoop.bus import MessageBus
-from netcoop.protocol import Envelope, MsgType
+from netcoop.protocol import Envelope, MsgType, Report
 from netcoop.state import RunState
 
 
@@ -151,6 +151,7 @@ class Orchestrator:
         state.stage = "correlator"
         if "correlator" not in self.agents:
             self._add_limitation(state, "correlator not-installed")
+            self._ensure_diagnosis(state)
             self._complete_stage(state, "correlator")
             return
 
@@ -169,10 +170,11 @@ class Orchestrator:
         outputs, reason = await self._call_agent("correlator", task)
         if reason is not None:
             self._add_limitation(state, f"correlator unavailable: {reason}")
+            self._ensure_diagnosis(state)
             self._complete_stage(state, "correlator")
             return
 
-        queries = self._record_correlator_outputs(state, outputs)
+        queries =self._record_correlator_outputs(state, outputs)
         while queries and state.rounds < 2:
             state.rounds += 1
             feedback: list[Envelope] = []
@@ -195,7 +197,50 @@ class Orchestrator:
 
         if queries:
             self._add_limitation(state, "correlator query limit reached after 2 rounds")
+        self._ensure_diagnosis(state)
         self._complete_stage(state, "correlator")
+
+    def _ensure_diagnosis(self, state: RunState) -> None:
+        """Guarantee a diagnosis exists so the reporter can always run."""
+
+        correlator = state.findings.get("correlator")
+        if isinstance(correlator, dict) and isinstance(
+            correlator.get("diagnosis"), dict
+        ):
+            return
+        evidence: list[dict[str, Any]] = []
+        devices: list[str] = []
+        sources: list[str] = []
+        for finding in self._analysis_findings(state):
+            for device in finding.get("affected_devices", []):
+                if device not in devices:
+                    devices.append(device)
+            for item in finding.get("evidence", []):
+                if not isinstance(item, dict):
+                    continue
+                row = {
+                    "metric": item.get("metric"),
+                    "value": item.get("value"),
+                    "interpretation": item.get("interpretation", ""),
+                }
+                if row["metric"] is not None and row["value"] is not None and row not in evidence:
+                    evidence.append(row)
+            if finding.get("agent") and finding["agent"] not in sources:
+                sources.append(finding["agent"])
+        state.findings["correlator"] = {
+            "agent": "correlator",
+            "diagnosis": {
+                "status": "insufficient_evidence",
+                "cause": "insufficient_evidence",
+                "confidence": 0.0,
+                "confidence_category": "insufficient",
+                "affected_devices": devices,
+                "alternatives": [],
+                "evidence": evidence,
+                "evidence_sources": sources,
+                "conflicts": [],
+            },
+        }
 
     async def _route_query(
         self, state: RunState, query: Envelope
@@ -234,6 +279,10 @@ class Orchestrator:
         state.stage = "reporter"
         if "reporter" not in self.agents:
             self._add_limitation(state, "reporter not-installed")
+            state.findings["reporter"] = {
+                "report": self._fallback_report(state).model_dump(mode="json"),
+                "narrative": None,
+            }
             self._complete_stage(state, "reporter", final=True)
             return
 
@@ -262,7 +311,38 @@ class Orchestrator:
                 result = next(iter(responses), None)
                 if result is not None:
                     state.findings["reporter"] = result.payload
+        if not isinstance(state.findings.get("reporter"), dict):
+            state.findings["reporter"] = {
+                "report": self._fallback_report(state).model_dump(mode="json"),
+                "narrative": None,
+            }
         self._complete_stage(state, "reporter", final=True)
+
+    def _fallback_report(self, state: RunState) -> Report:
+        self._ensure_diagnosis(state)
+        diagnosis = state.findings["correlator"]["diagnosis"]
+        telemetry = state.telemetry or {}
+        return Report(
+            incident_id=str(telemetry.get("incident_id", "unknown")),
+            status=diagnosis["status"],
+            suspected_root_cause=(
+                "Evidence is insufficient to identify a root cause; collect more data."
+                if diagnosis["status"] == "insufficient_evidence"
+                else str(diagnosis["cause"]).replace("_", " ")
+            ),
+            confidence=diagnosis["confidence"],
+            confidence_category=diagnosis["confidence_category"],
+            affected_devices=diagnosis["affected_devices"],
+            supporting_evidence=diagnosis["evidence"],
+            alternative_causes=[
+                f"{a['cause'].replace('_', ' ')} (confidence {a['confidence']:.1%})"
+                for a in diagnosis.get("alternatives", [])
+            ],
+            recommended_actions=["Re-run the diagnosis once the failed component is restored."],
+            evidence_sources=diagnosis["evidence_sources"],
+            limitations=list(dict.fromkeys(state.limitations)),
+            run_id=state.run_id,
+        )
 
     async def _call_agent(
         self, name: str, envelope: Envelope
