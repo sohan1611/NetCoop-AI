@@ -21,6 +21,7 @@ Every task: add/extend pytest tests in tests/ for what it builds; `pytest -q` mu
 | T14 | DONE | low | README.md: problem, architecture diagram (mermaid), agents, protocol, confidence method, error handling, setup, run, tests, scenarios, limitations, third-party acknowledgements | fresh clone setup works |
 | T15 | DONE | — (Claude C5) | `docs/DEMO_SCRIPT.md`: 3–5 min video script — dashboard run of congestion → live agent messages → QUERY loop → report; interop/malformed input handled; `--fail-agent` degrade; simulated fix + verify; `evaluate.py` table | script fits ≤5 min |
 | T16 | DONE | medium | Fix review bugs B1–B8 below (S4 review). Owner: Sonnet until Codex quota resets | `pytest -q` passes, `evaluate` 16/16, `python scripts/stress_test.py` shows no CRASH and B2–B7 cases diagnosed correctly |
+| T17 | TODO | medium | Fix security V1–V8 and bugs B9–B14 below (S6 review). Owner: Sonnet (Codex if quota back) | `pytest -q` passes, `evaluate` 16/16, `scripts/stress_test.py` + `scripts/hostile_inputs.py` no CRASH, 20k-device input < 5 s and = normal, no report lists an alternative with confidence ≥ the chosen cause |
 
 ## Canonical telemetry (input after normalization)
 ```json
@@ -53,6 +54,26 @@ Repro tool: `python scripts/stress_test.py`.
 - **Note (not a bug fix, optional)** — rules are edge-tuned: ±15 % value jitter drops weak_wifi/congestion to 8/10. If time permits, widen grading so near-threshold values give partial credit; never break labels.
 After B1–B8: update README robustness section if behaviour changed, rerun stress test, commit per bug group.
 
+## Review findings S6 (Opus) — T17. Fix in order; regression test for each
+Repro: `python scripts/stress_test.py`, `python scripts/hostile_inputs.py`.
+### Security (public Render API, `api/server.py`)
+- **V1 HIGH — CPU DoS.** `/api/run` + `/api/runs/{id}/remediate` unauthenticated, unlimited concurrency; agents do sync CPU work inside `async def handle`, blocking the event loop (1.6 MB / 20k-device input = 16.6 s, freezes all SSE). Fix: (a) `asyncio.Semaphore(2)` around runs, return 429 when full; (b) run `build_orchestrator(...).run` in a worker thread (`asyncio.to_thread(asyncio.run, ...)`) so the API loop stays responsive; (c) normalizer caps: max 2,000 devices and 20,000 samples → clear `error` ("input too large: …"); (d) tiny in-memory per-IP limiter: 10 runs/min → 429. Test: 3 concurrent runs → third gets 429; oversize input → error report.
+- **V2 MED — upload memory.** `await request.body()` before the 5 MB check. Reject on `Content-Length` > 5 MB first, then read via `request.stream()` aborting past 5 MB → 413.
+- **V3 MED — unbounded growth.** `runs/`, `runs/uploads/` and the `tasks` dict never shrink. Add cleanup on each `/api/run`: delete run/upload dirs older than `NETCOOP_RUN_TTL_S` (default 3600), pop finished tasks older than TTL.
+- **V4 LOW — README privacy note:** runs/reports are readable by anyone with the run id; demo deployment, don't upload real campus data.
+- **V5 LOW — error leakage.** API responses must not contain raw exception text (e.g. "use sys.set_int_max_str_digits"); map to generic messages ("number too large", "JSON nesting too deep", "invalid JSON") in the normalizer; keep detail only in server logs.
+- **V6 LOW — headers.** Middleware adding `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, CSP `default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self'`. Add `integrity` + `crossorigin` SRI to the cytoscape `<script>` (compute sha512 of the exact 3.30.2 file).
+- **V7 LOW** — API `safe()` for scenarios must reject `labels` (same as `mcp_server._path`).
+- **V8 LOW** — runs tracked in-process: document in README/deploy notes that Render must run exactly one uvicorn worker; ensure start command has no `--workers`.
+### Diagnosis bugs (`netcoop/agents/correlator.py`, `config.py`, `connectivity.py`, `normalizer.py`)
+- **B9 HIGH — self-contradicting report.** Domain-rule override picks a winner without fixing confidence/alternatives: hardware_failure 0.47 with alternative "normal (56.5%)"; hardware_failure 0.51 with "congestion (54.4%)". Fix: after any override, alternatives must be strictly below winner confidence (drop or cap them) and add limitation "selected by domain rule over higher raw score" with the raw scores. Invariant test across every scenario + stress case: `all(alt_conf < confidence)`.
+- **B10 HIGH — 'normal' wins/scores high while a device is down.** Normal signature averages over all devices, so healthy devices outvote a down one. Fix: `normal` is ineligible (score 0) if any device `status == down` or any metric grade ≥ 1.0 (crit); a down device makes hardware_failure (or interface_fault if interface errors dominate) eligible even without topology. Repro: canonical input with device A `status: down`, `packet_loss_pct: 100`, no topology → currently `latency_degradation`; must be `hardware_failure`, affected `[A]`.
+- **B11 MED — connectivity votes without topology.** For organizer records (no topology, no services) connectivity emits interface_fault/hardware_failure, adding "Agents disagree" to nearly every organizer result. Without topology and services it must abstain (finding with empty hypotheses + note "no topology/services supplied"), and the correlator must ignore abstaining agents in agreement factor. Clean org_hardware_failure should then have no "Agents disagree" limitation and higher confidence.
+- **B12 MED — large inputs time out → wrong `insufficient_evidence`.** Covered by V1 (thread + caps); also make per-agent work O(n) (index samples by device once). 20k healthy devices → `normal` in < 5 s.
+- **B13 LOW — non-finite numbers.** `NaN`, `Infinity`, `1e999` → treat as invalid (wrong_type issue, value dropped), never used in scoring.
+- **B14 LOW (optional) — brittle near thresholds.** ±15 % jitter: weak_wifi 8/10, schema_v0_legacy 7/10. Give partial credit just below `warn` (e.g. grade ramps from 0.8·warn) only if all labels still pass.
+After T17: update README robustness/security section, rerun both scripts, commit per group (V1–V3 / V4–V8 / B9–B11 / B12–B14), push.
+
 ## Session log (≤10 lines per session)
 - S1 (Opus/high): problem read, PLAN + TASKS written. Next: T1. Organizer notebook read; format rules added above.
 - S2 (Sonnet/medium): T1–T9 DONE via Codex gpt-6.1-sol (T1–T7 ran at xhigh by mistake; T8–T9 low). M1 CLI cleared: `evaluate` 16/16, 85 tests. Next: T10 (llm.py, medium), T11 (evaluate script + suite, medium), T12 (API + dashboard, medium). Known nit: duplicate latency_ms evidence rows in report (dedupe in T11/T12). Codex invoke: `-m gpt-6.1-sol -c model_reasoning_effort=<per Effort col>`, run_in_background.
@@ -61,3 +82,4 @@ After B1–B8: update README robustness section if behaviour changed, rerun stre
 - S4 (Opus review): T1–T15 verified (125 tests, evaluate 16/16). Stress test found B1–B8 (see Review bugs). Next: T16 by Sonnet (Codex quota out).
 - S5 (Sonnet): T16 DONE, B1-B8 fixed with regression tests (141 tests, evaluate 16/16, stress test no CRASH), pushed per group.
   Decisions: B2 = weights rebalanced + multi-domain rule; B5 = "normal" matched on present metrics once coverage >= 0.4.
+- S6 (Opus security/bug hunt): T16 verified (141 tests, 16/16, no crashes). Found V1–V8 + B9–B14 → T17. Vercel SSE proxy unverified (need Vercel URL).
