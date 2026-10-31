@@ -81,6 +81,9 @@ def _build_graph(topology: Any) -> tuple[nx.DiGraph, str | None, list[str]]:
                 continue
             if not isinstance(target, str) or not target:
                 continue
+            if source not in graph or target not in graph:
+                notes.append(f"Dropped link {source} -> {target}: endpoint is not a declared topology node.")
+                continue
             graph.add_edge(source, target, **row)
 
     if core_candidates:

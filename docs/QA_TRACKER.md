@@ -35,21 +35,21 @@ Priority = ours after verification (audit priority in brackets when changed).
 | NC-004 | P1 | Confirmed | fixture 04 → 1 sample; dedupe key drops 2nd row (normalizer.py:735-753) | T23 | Tested (T23: `test_nc004_same_instant_merges_complementary_fields_and_nulls_conflicts`) |
 | NC-005 | P1 | Confirmed | fixture 05 results differ by key order | T23 | Tested (T23: `test_nc005_alias_conflicts_are_order_independent`, `test_nc005_converted_aliases_and_canonical_precedence`) |
 | NC-006 | P1 | Confirmed | fixture 06 → normal 0.7 with FAULTY at 110 ms / 2.5 % loss | T24 | Tested (T24: `test_nc006_normal_uses_worst_device`) |
-| NC-007 | P1 | Confirmed | `/api/runs` + `/stream` + report/details have no ownership check; stream replays raw input | T25 | Confirmed |
-| NC-008 | P2 [P1] | Confirmed (partial remedy) | upload never calls `admit()`, cleanup only on `/api/run`. Downgraded: 5 MB cap + TTL exist. Remedy "reject non-JSON early" **rejected**: malformed input must reach the normalizer (PS interop demo) | T25 | Confirmed |
+| NC-007 | P1 | Confirmed | `/api/runs` + `/stream` + report/details have no ownership check; stream replays raw input | T25 | Tested (T25: tests/test_api.py) |
+| NC-008 | P2 [P1] | Confirmed (partial remedy) | upload never calls `admit()`, cleanup only on `/api/run`. Downgraded: 5 MB cap + TTL exist. Remedy "reject non-JSON early" **rejected**: malformed input must reach the normalizer (PS interop demo) | T25 | Tested (T25: tests/test_api.py) |
 | NC-009 | P1 | Confirmed | details.py:105 `points[:MAX_SERIES]` keeps oldest 200 | T26 | Confirmed |
 | NC-010 | P1 | Confirmed | app.js:73 CRIT counts confidence ≥ 0.75 incl. normal | T26 | Confirmed |
 | NC-011 | P2 [P1] | Confirmed | app.js:67 `incidentKey` prefers static incident_id. UX only (per-browser localStorage) | T26 | Confirmed |
 | NC-012 | P2 | Confirmed | correlator.py:924-931 keeps only `confidence < winner`. Reverses T17 rule "no alternative ≥ chosen" — transparency wins; show with `overruled_by` | T24 | Tested (T24: `test_nc012_domain_overruled_alternatives_remain_visible`) |
 | NC-013 | P3 [P2] | Partially confirmed | Claim that bundled scenarios use `version` is **false** (they use `schema_version`, normal.json:176). Missing `version` alias is real (fixture 10) | T23 | Tested (T23: `test_nc013_version_alias_has_full_quality`) |
 | NC-014 | P2 | Confirmed | dedupe key is raw timestamp string | T23 | Tested (T23: `test_nc014_dedupe_uses_utc_instant_not_timestamp_spelling`) |
-| NC-015 | P2 | Confirmed | connectivity.py:84 `add_edge` creates undeclared nodes | T25 | Confirmed |
+| NC-015 | P2 | Confirmed | connectivity.py:84 `add_edge` creates undeclared nodes | T25 | Tested (T25: tests/test_api.py) |
 | NC-016 | P3 [P2] | Confirmed | app.js:436-437 root (amber) selector after bad (red) | T26 | Confirmed |
 | NC-017 | P2 | Confirmed | app.js:134 any non-normal/non-critical report → "Degraded" | T26 | Confirmed |
 | NC-018 | P2 | Confirmed | app.js:144-146 insufficient → P3 | T26 | Confirmed |
 | NC-019 | P2 | Confirmed | app.js:360 onerror closes stream, no retry/poll (matters on Render cold start) | T26 | Confirmed |
-| NC-020 | P3 [P2] | Confirmed | `/stream` uses `safe()` not `run_dir()` → 200 + done for unknown id | T25 | Confirmed |
-| NC-021 | P2 | Confirmed | only devices/samples capped; nodes/links/services unbounded | T25 | Confirmed |
+| NC-020 | P3 [P2] | Confirmed | `/stream` uses `safe()` not `run_dir()` → 200 + done for unknown id | T25 | Tested (T25: tests/test_api.py) |
+| NC-021 | P2 | Confirmed | only devices/samples capped; nodes/links/services unbounded | T25 | Tested (T25: tests/test_api.py) |
 | NC-022 | P2 | Confirmed | renderSamples → one row per sample (≤ 50k) | T26 | Confirmed |
 | NC-023 | P3 [P2] | Confirmed | `state.failAgent` never cleared after run; CLI says "next run" | T26 | Confirmed |
 | NC-024 | P3 [P2] | Confirmed | app.js:751 "no conflicts" ignores validation issues | T26 | Confirmed |
@@ -60,8 +60,8 @@ Priority = ours after verification (audit priority in brackets when changed).
 | NC-029 | P3 | Confirmed | app.js:745 "CORRELATION HASH" shows run_id | T26 | Confirmed |
 | NC-030 | P3 | Confirmed | PIPELINE_AGENTS lists 5, reporter missing | T26 | Confirmed |
 | NC-031 | P3 | Confirmed | index.html:170 no synthetic-data notice | T26 | Confirmed |
-| NC-032 | P3 | Confirmed | server.py `if scenario … elif upload_id` | T25 | Confirmed |
-| NC-033 | P3 | Confirmed | `/api/runs` lists only dirs with report.json/state.json; fatal.txt-only dirs vanish | T25 | Confirmed |
+| NC-032 | P3 | Confirmed | server.py `if scenario … elif upload_id` | T25 | Tested (T25: tests/test_api.py) |
+| NC-033 | P3 | Confirmed | `/api/runs` lists only dirs with report.json/state.json; fatal.txt-only dirs vanish | T25 | Tested (T25: tests/test_api.py) |
 
 Totals: 30 confirmed, 2 partially confirmed (NC-008 remedy, NC-013 claim), 1 rejected (NC-028).
 
@@ -97,3 +97,5 @@ Verification: `pytest -q` 232 passed (workspace `--basetemp`; system temp direct
 ## Matrix execution log
 
 T27 fills `docs/qa/TEST_MATRIX.md` Result column (Pass / Fail→NC-0xx / N/A + reason). New defects found while executing get IDs NC-034+ in the table above.
+
+T25 status: DONE. tests/test_api.py covers two-session isolation (list/stream/report/report.md/details/topology/remediate/upload → 404) and each NC id. pytest 241 passed, evaluate 16/16.

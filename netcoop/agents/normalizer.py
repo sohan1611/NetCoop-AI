@@ -171,6 +171,9 @@ TOP_LEVEL_FIELDS = {
 # Size caps (V1). Set above the 20k-record hostile probe, which must still diagnose.
 MAX_DEVICES = 25_000
 MAX_SAMPLES = 50_000
+MAX_NODES = 200
+MAX_LINKS = 1000
+MAX_SERVICES = 200
 
 
 class NormalizeResult(BaseModel):
@@ -465,6 +468,10 @@ def _section_rows(raw: Any, section: str, tracker: _QualityTracker,
     if not isinstance(raw, list):
         tracker.add("wrong_type", f"wrong type for {path}; expected a list")
         return []
+    limit = {"nodes": MAX_NODES, "links": MAX_LINKS, "services": MAX_SERVICES}.get(section)
+    if limit is not None and len(raw) > limit:
+        tracker.add("expected_missing", f"{path} truncated to {limit} records (received {len(raw)})")
+        raw = raw[:limit]
     rows = []
     for index, row in enumerate(raw):
         normalized = _normalize_row(row, section, tracker, f"{path}[{index}]")
@@ -717,6 +724,15 @@ def _normalize_canonical(source: dict[str, Any], tracker: _QualityTracker) -> di
             "links": _section_rows(topology_raw.get("links", []), "links", tracker,
                                    "root.topology.links"),
         }
+
+    declared = {node["id"] for node in topology["nodes"] if node.get("id")}
+    links = []
+    for link in topology["links"]:
+        if link.get("src") not in declared or link.get("dst") not in declared:
+            tracker.add("missing", f"Dropped link {link.get('src')} -> {link.get('dst')}: endpoint is not a declared topology node")
+        else:
+            links.append(link)
+    topology["links"] = links
 
     devices = _optional_section(normalized_source, "devices", tracker)
     samples = _optional_section(normalized_source, "samples", tracker)
