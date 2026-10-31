@@ -321,7 +321,12 @@ def _candidate(
             continue
         observations[metric] = observation
         weighted_match += weight * observation.grade
+    # Absent metrics are not evidence of an anomaly: once "normal" has enough
+    # coverage it is matched on the metrics present (coverage still scales the
+    # confidence below).
     total_weight = sum(weight for _, weight in signature)
+    if cause == "normal" and len(observations) / len(signature) >= MIN_SIGNATURE_COVERAGE:
+        total_weight = sum(weight for metric, weight in signature if metric in observations)
     match = _clamp(weighted_match / total_weight) if total_weight else 0.0
     coverage = len(observations) / len(signature) if signature else 0.0
     agreement = _agreement_factor(cause, tops)

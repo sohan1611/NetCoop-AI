@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -99,7 +100,11 @@ ISSUE_PENALTIES = {
     "unknown": 0.02,
     "severity": 0.05,
     "llm_mapped": 0.0,
+    "coerced": 0.0,
+    "expected_missing": 0.0,
 }
+
+_NUMERIC_STRING = re.compile(r"^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*[A-Za-z%/]{0,8}\s*$")
 
 SECTION_FIELDS = {
     "nodes": {"id", "type", "role", "location"},
@@ -215,6 +220,11 @@ def _convert_value(value: Any, target: str, factor: float,
     if target in NUMERIC_FIELDS:
         if value is None:
             return None
+        if isinstance(value, str):
+            match = _NUMERIC_STRING.match(value)
+            if match is not None:
+                tracker.add("coerced", f"coerced numeric string at {path}: {value!r}")
+                value = float(match.group(1))
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             tracker.add("wrong_type", f"wrong type for {path}; expected a number")
             return None
@@ -311,12 +321,16 @@ def _section_rows(raw: Any, section: str, tracker: _QualityTracker,
 
 
 def _split_metric_row(row: dict[str, Any], tracker: _QualityTracker, path: str,
-                      *, organizer: bool) -> tuple[dict[str, Any], dict[str, Any]]:
+                      *, organizer: bool,
+                      default_id: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     device: dict[str, Any] = {}
     sample: dict[str, Any] = {}
     device_id = row.get("device_id", row.get("device", row.get("id")))
     if isinstance(device_id, str):
         device["device_id"] = sample["device_id"] = device_id
+    elif device_id is None and default_id is not None:
+        device["device_id"] = sample["device_id"] = default_id
+        tracker.add("missing", f"missing field {path}.device_id; using {default_id}")
     elif device_id is None:
         tracker.add("missing", f"missing field {path}.device_id")
     else:
@@ -445,11 +459,12 @@ def _normalize_organizer(rows: list[Any], tracker: _QualityTracker) -> dict[str,
         if not isinstance(row, dict):
             tracker.add("wrong_type", f"wrong type for {path}; expected an object")
             continue
-        device, sample = _split_metric_row(row, tracker, path, organizer=True)
+        device, sample = _split_metric_row(row, tracker, path, organizer=True,
+                                       default_id=f"UNKNOWN_DEVICE_{index}")
         devices.append(device)
         samples.append(sample)
-    tracker.add("missing", "missing section topology; using empty topology")
-    tracker.add("missing", "missing section services; using empty list")
+    tracker.add("expected_missing", "missing section topology; using empty topology")
+    tracker.add("expected_missing", "missing section services; using empty list")
     return _base_telemetry(
         collected_at=_latest_timestamp(samples),
         devices=_merge_devices(devices),
@@ -613,7 +628,7 @@ def normalize(raw: str | bytes | dict | list, use_llm: bool = False) -> Normaliz
         source = _parse_raw(raw)
         if isinstance(source, list):
             telemetry = _normalize_organizer(source, tracker)
-        elif "metrics" in source and any(key in source for key in ("device_id", "device", "id")):
+        elif "metrics" in source:
             telemetry = _normalize_organizer([source], tracker)
         else:
             version = source.get("schema_version", source.get("schemaVersion"))

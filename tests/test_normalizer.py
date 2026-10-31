@@ -200,3 +200,35 @@ def test_null_optional_metric_is_not_a_quality_issue():
     result = normalize(raw)
     assert not any('expected a number' in i for i in result.data_quality.issues)
     assert result.data_quality.score > 0.8
+
+
+def test_numeric_strings_are_coerced_not_dropped():
+    result = normalize({'device_id': 'SW1', 'timestamp': '2026-10-31T09:00:00Z',
+                        'metrics': {'cpu_utilization_pct': '99.9%', 'latency_ms': ' 845.7 ms'}})
+    device = result.telemetry['devices'][0]
+    assert device['cpu_pct'] == 99.9
+    assert result.telemetry['samples'][0]['latency_ms'] == 845.7
+    assert not any('wrong type' in issue for issue in result.data_quality.issues)
+    assert any('coerced numeric string' in issue for issue in result.data_quality.issues)
+    assert result.data_quality.score == 1.0
+
+
+def test_organizer_record_without_device_id_gets_placeholder():
+    result = normalize({'timestamp': '2026-10-31T09:00:00Z', 'metrics': {'cpu_utilization_pct': 12.0}})
+    assert result.telemetry['devices'][0]['device_id'] == 'UNKNOWN_DEVICE_0'
+    assert result.telemetry['devices'][0]['cpu_pct'] == 12.0
+    assert any('device_id; using UNKNOWN_DEVICE_0' in issue for issue in result.data_quality.issues)
+
+
+def test_clean_organizer_record_has_full_quality_and_high_confidence():
+    import asyncio
+    from tempfile import TemporaryDirectory
+    from netcoop.cli import build_orchestrator
+    from pathlib import Path
+    raw = (Path(__file__).resolve().parents[1] / 'data' / 'scenarios' / 'org_normal.json').read_text(encoding='utf-8')
+    with TemporaryDirectory() as runs:
+        state = asyncio.run(build_orchestrator(runs).run(raw))
+    assert state.findings['normalizer']['data_quality']['score'] == 1.0
+    assert any('missing section topology' in item for item in state.findings['normalizer']['data_quality']['issues'])
+    diagnosis = state.findings['correlator']['diagnosis']
+    assert diagnosis['cause'] == 'normal' and diagnosis['confidence'] >= 0.7
