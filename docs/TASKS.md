@@ -23,7 +23,7 @@ Every task: add/extend pytest tests in tests/ for what it builds; `pytest -q` mu
 | T16 | DONE | medium | Fix review bugs B1–B8 below (S4 review). Owner: Sonnet until Codex quota resets | `pytest -q` passes, `evaluate` 16/16, `python scripts/stress_test.py` shows no CRASH and B2–B7 cases diagnosed correctly |
 | T17 | DONE | medium | Fix security V1–V8 and bugs B9–B14 below (S6 review). Owner: Sonnet (Codex if quota back) | `pytest -q` passes, `evaluate` 16/16, `scripts/stress_test.py` + `scripts/hostile_inputs.py` no CRASH, 20k-device input < 5 s and = normal, no report lists an alternative with confidence ≥ the chosen cause |
 | T18 | DONE | medium | Bugs N1–N7 + UI backend endpoints A1–A6 below (S8 review). Owner: Sonnet now | pytest passes, evaluate 16/16, 100 healthy org records with an extra field → `normal` ≥ 0.6, new endpoints covered in tests/test_api.py |
-| T19 | IN PROGRESS — Groups 1–5 and Group 6 runs A–C (F1–F16) implemented; awaiting architect verification | medium (Codex, after 5:24 PM) | Build the console UI exactly per `docs/UI_PLAN.md` + `docs/ui-reference/*.png`. Needs T18 A1–A6 first | UI_PLAN §7 acceptance |
+| T19 | DONE | medium (Codex, after 5:24 PM) | Build the console UI exactly per `docs/UI_PLAN.md` + `docs/ui-reference/*.png`. Needs T18 A1–A6 first | UI_PLAN §7 acceptance |
 
 ## Canonical telemetry (input after normalization)
 ```json
@@ -108,3 +108,5 @@ Commit groups: N1–N3 / N4–N7 / A1–A6. Push after each.
 - S8 (Opus): T17 verified (182 tests, 16/16, Vercel SSE proxy OK, headers OK on API). Found N1–N7 → T18 (Sonnet). UI spec written: docs/UI_PLAN.md + docs/ui-reference/ → T19 (Codex 5:24 PM, after T18 A1–A6).
 - S9 (Sonnet): T18 DONE, N1–N7 fixed + A1–A6 built (198 tests, 16/16, no CRASH); N7: latency_spike back to 59/60 with a latency-dominance rule; 100 healthy org records + extra field = normal 0.8.
   Decisions: data-quality penalty = weight x repeats x share of records affected (cap 0.25/kind), issues aggregated; `Report.cause` added so /api/runs needs no state load. Next: T19 (Codex UI).
+- S10 (Sonnet): T19 DONE via Codex gpt-6.1-sol (medium): G1–G5 UI + G6 fixes F1–F16; 198 tests, 5 scenarios + `fail infrastructure` + remediation checked at 1280/375px, no console errors, no page overflow.
+  Notes: Codex needs helper exes restored from the WindowsApps package into its bin dir when the app cleans them; `resume` takes `-c sandbox_mode=...` not `-s`. Next: checkpoint.
