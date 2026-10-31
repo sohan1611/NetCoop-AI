@@ -167,9 +167,16 @@ def test_full_orchestrator_run_uses_real_correlator(tmp_path: Path):
 def test_supporting_evidence_deduplicates_metric_device_value():
     from netcoop.agents.correlator import _RunContext, _score
 
-    telemetry = normalize(
-        (SCENARIO_DIR / 'congestion.json').read_text(encoding='utf-8')
-    ).telemetry
+    # Every distinct evidence key belongs to the selected location/time scope.
+    telemetry = {
+        'collected_at': '2026-10-31T09:00:00Z',
+        'devices': [{'device_id': 'r1', 'queue_drops': 50}],
+        'samples': [dict(device_id=device, latency_ms=latency,
+                         link_utilization_pct=95, timestamp='2026-10-31T09:00:00Z')
+                    for device, latency in [('r1', 185), ('r2', 185), ('r1', 200)]],
+        'topology': {'nodes': [{'id': 'r1'}, {'id': 'r2'}],
+                     'links': [{'src': 'r1', 'dst': 'r2'}]},
+    }
     evidence = dict(metric='latency_ms', device_id='r1', value=185,
                     interpretation='High latency', timestamp='2026-10-31T09:00:00Z')
     context = _RunContext(

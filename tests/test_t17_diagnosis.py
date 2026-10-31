@@ -1,4 +1,4 @@
-"""T17 regression tests: B9 (alternatives below winner), B10 (down device vs normal), B11 (abstain)."""
+"""T17 regression tests: B9/D7 (overruled alternatives explained), B10 (down device vs normal), B11 (abstain)."""
 import asyncio
 import json
 from pathlib import Path
@@ -13,7 +13,7 @@ SCENARIOS = [p for p in SCENARIOS if p.stem != "labels"]
 
 
 def _run(tmp_path, raw):
-    state = asyncio.run(build_orchestrator(tmp_path).run(raw))
+    state = asyncio.run(build_orchestrator(tmp_path, no_llm=True).run(raw))
     report = _report(state)
     return state, report, _cause(state, report)
 
@@ -23,13 +23,15 @@ def _diagnosis(state):
 
 
 @pytest.mark.parametrize("path", SCENARIOS, ids=lambda p: p.stem)
-def test_alternatives_strictly_below_chosen_confidence(tmp_path, path):
+def test_higher_alternatives_disclose_override_rule(tmp_path, path):
     state, _, _ = _run(tmp_path, path.read_text(encoding="utf-8"))
     if isinstance(state, dict):  # run ended in an error report: no diagnosis to check
         return
     diagnosis = _diagnosis(state)
     for alt in diagnosis["alternatives"]:
-        assert alt["confidence"] < diagnosis["confidence"], (alt, diagnosis["confidence"])
+        # T24/D7 supersedes T17: preserve higher raw scores with the rule.
+        if alt["confidence"] >= diagnosis["confidence"]:
+            assert alt.get("overruled_by"), (alt, diagnosis)
 
 
 def test_domain_rule_override_discloses_higher_raw_score(tmp_path):
@@ -37,7 +39,10 @@ def test_domain_rule_override_discloses_higher_raw_score(tmp_path):
     state, report, cause = _run(tmp_path, path.read_text(encoding="utf-8"))
     diagnosis = _diagnosis(state)
     assert cause == "hardware_failure"
-    assert all(alt["confidence"] < diagnosis["confidence"] for alt in diagnosis["alternatives"])
+    higher = [alt for alt in diagnosis["alternatives"]
+              if alt["confidence"] >= diagnosis["confidence"]]
+    assert higher
+    assert all(alt.get("overruled_by") for alt in higher)
     assert any("selected by domain rule over higher raw score" in item
                for item in report.limitations)
 

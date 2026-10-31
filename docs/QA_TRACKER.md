@@ -12,7 +12,7 @@ Priority = ours after verification (audit priority in brackets when changed).
 | Fixture | Got | Should be (acceptance) |
 |---|---|---|
 | 00 control_normal | normal 1.0 | normal, no CRIT |
-| 01 disconnected_signals | **congestion 1.0** | not a confident single-device congestion; limitation "evidence from unrelated devices" |
+| 01 disconnected_signals | **congestion 1.0** | not a confident single-device congestion; limitation "evidence from unrelated devices/times" |
 | 02 impossible_values | **congestion 0.9** | impossible values quarantined + itemized; insufficient_evidence |
 | 03 six_years_old | **congestion 1.0** | stale vs `collected_at` → quarantined; insufficient_evidence |
 | 04 same_timestamp_complementary | 1 sample, latency only (other row dropped) | one merged sample with all 3 fields |
@@ -29,18 +29,18 @@ Priority = ours after verification (audit priority in brackets when changed).
 
 | ID | Pri | Verdict | Evidence (S13) | Task | Status |
 |---|---|---|---|---|---|
-| NC-001 | P0 | Confirmed | fixture 01 → congestion 1.0 from AP-A util + HOST-C latency; correlator maxes each metric fleet-wide | T24 | Confirmed |
+| NC-001 | P0 | Confirmed | fixture 01 → congestion 1.0 from AP-A util + HOST-C latency; correlator maxes each metric fleet-wide | T24 | Tested (T24: `test_nc001_signature_requires_local_support`) |
 | NC-002 | P0 | Confirmed | fixture 02 → congestion 0.9; `_validate_rows` flags but keeps values | T23 | Tested (T23: `test_nc002_impossible_values_are_itemized_and_excluded`, `test_nc002_each_impossible_metric_becomes_none`) |
-| NC-003 | P0 [P1] | Confirmed | fixtures 03/07/11 → congestion 0.83–1.0; cutoff = batch max − 1 h, stale rows kept, no future check | T23 (window) + T24 (time join) | T23 window tested (`test_nc003_collected_at_rejects_stale_and_future_samples`, `test_nc003_time_window_boundaries_and_newest_sample_fallback`); T24 time join pending |
+| NC-003 | P0 [P1] | Confirmed | fixtures 03/07/11 → congestion 0.83–1.0; cutoff = batch max − 1 h, stale rows kept, no future check | T23 (window) + T24 (time join) | T23 window tested (`test_nc003_collected_at_rejects_stale_and_future_samples`, `test_nc003_time_window_boundaries_and_newest_sample_fallback`); T24 time join tested (`test_nc003_signature_requires_same_time_bucket`) |
 | NC-004 | P1 | Confirmed | fixture 04 → 1 sample; dedupe key drops 2nd row (normalizer.py:735-753) | T23 | Tested (T23: `test_nc004_same_instant_merges_complementary_fields_and_nulls_conflicts`) |
 | NC-005 | P1 | Confirmed | fixture 05 results differ by key order | T23 | Tested (T23: `test_nc005_alias_conflicts_are_order_independent`, `test_nc005_converted_aliases_and_canonical_precedence`) |
-| NC-006 | P1 | Confirmed | fixture 06 → normal 0.7 with FAULTY at 110 ms / 2.5 % loss | T24 | Confirmed |
+| NC-006 | P1 | Confirmed | fixture 06 → normal 0.7 with FAULTY at 110 ms / 2.5 % loss | T24 | Tested (T24: `test_nc006_normal_uses_worst_device`) |
 | NC-007 | P1 | Confirmed | `/api/runs` + `/stream` + report/details have no ownership check; stream replays raw input | T25 | Confirmed |
 | NC-008 | P2 [P1] | Confirmed (partial remedy) | upload never calls `admit()`, cleanup only on `/api/run`. Downgraded: 5 MB cap + TTL exist. Remedy "reject non-JSON early" **rejected**: malformed input must reach the normalizer (PS interop demo) | T25 | Confirmed |
 | NC-009 | P1 | Confirmed | details.py:105 `points[:MAX_SERIES]` keeps oldest 200 | T26 | Confirmed |
 | NC-010 | P1 | Confirmed | app.js:73 CRIT counts confidence ≥ 0.75 incl. normal | T26 | Confirmed |
 | NC-011 | P2 [P1] | Confirmed | app.js:67 `incidentKey` prefers static incident_id. UX only (per-browser localStorage) | T26 | Confirmed |
-| NC-012 | P2 | Confirmed | correlator.py:924-931 keeps only `confidence < winner`. Reverses T17 rule "no alternative ≥ chosen" — transparency wins; show with `overruled_by` | T24 | Confirmed |
+| NC-012 | P2 | Confirmed | correlator.py:924-931 keeps only `confidence < winner`. Reverses T17 rule "no alternative ≥ chosen" — transparency wins; show with `overruled_by` | T24 | Tested (T24: `test_nc012_domain_overruled_alternatives_remain_visible`) |
 | NC-013 | P3 [P2] | Partially confirmed | Claim that bundled scenarios use `version` is **false** (they use `schema_version`, normal.json:176). Missing `version` alias is real (fixture 10) | T23 | Tested (T23: `test_nc013_version_alias_has_full_quality`) |
 | NC-014 | P2 | Confirmed | dedupe key is raw timestamp string | T23 | Tested (T23: `test_nc014_dedupe_uses_utc_instant_not_timestamp_spelling`) |
 | NC-015 | P2 | Confirmed | connectivity.py:84 `add_edge` creates undeclared nodes | T25 | Confirmed |
@@ -80,6 +80,19 @@ Totals: 30 confirmed, 2 partially confirmed (NC-008 remedy, NC-013 claim), 1 rej
 - **Gold labels**: the 16 scenarios must stay 16/16. Any intended label change needs a written reason here.
 
 T23 status: DONE. 24 new regression cases (tests/test_qa_t23.py); legacy test_normalizer duplicate/stale test updated to D1/D3 (1 sample). pytest 222 passed, evaluate 16/16.
+
+T24 status: DONE. Four regression functions / 10 cases in `tests/test_qa_t24.py` cover NC-001, NC-003, NC-006 and NC-012, including direct neighbours, the inclusive 5-minute join boundary, a 24-hour split, warning thresholds and raw-score preservation. Fault signatures and displayed evidence use the best device/neighbour/time scope; device/service snapshots use collection time. Congestion requires utilization plus local supporting metrics. Normal uses the worst health grade, retaining coverage penalties, and names warning-grade devices.
+
+T17's alternative-confidence test and the matching stress-script invariant were deliberately changed: D7 requires retaining higher raw scores with `overruled_by` rather than hiding them. The evidence-deduplication unit test now supplies evidence within the selected scope.
+
+Verification: `pytest -q` 232 passed (workspace `--basetemp`; system temp directory is inaccessible); `python scripts/evaluate.py --no-llm` 16/16; stress and hostile-input scripts no CRASH, with LLM disabled. No normalizer, UI or API changes.
+
+| Fixture | T24 verified acceptance |
+|---|---|
+| 00 control_normal | normal, no critical supporting metrics |
+| 01 disconnected_signals | low-confidence latency degradation; congestion below diagnosed gate; limitation "evidence from unrelated devices/times" |
+| 06 warn_only_in_healthy_fleet | warning-level interface fault, no diagnosed normal/Healthy; FAULTY named in limitations |
+| 11 signals_24h_apart | insufficient_evidence, not congestion; correlator-only time-join cases also pass |
 
 ## Matrix execution log
 

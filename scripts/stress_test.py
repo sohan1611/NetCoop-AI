@@ -7,12 +7,13 @@ from data.generator.organizer_generator import generate_telemetry
 TMP = tempfile.mkdtemp()
 def run(raw, fail=None):
     try:
-        res = asyncio.run(build_orchestrator(TMP, fail_agents=fail).run(raw if isinstance(raw, str) else json.dumps(raw)))
+        res = asyncio.run(build_orchestrator(TMP, fail_agents=fail, no_llm=True).run(raw if isinstance(raw, str) else json.dumps(raw)))
         rep = _report(res)
-        if not isinstance(res, dict):  # B9 invariant: alternatives strictly below the chosen confidence
+        if not isinstance(res, dict):  # T24/D7: domain-overruled higher raw alternatives must name the rule
             d = res.findings['correlator']['diagnosis']
-            if any(a['confidence'] >= d['confidence'] for a in d['alternatives']):
-                return 'CRASH:INVARIANT alternative >= confidence', rep
+            if any(a['confidence'] >= d['confidence'] and not a.get('overruled_by')
+                   for a in d['alternatives']):
+                return 'CRASH:INVARIANT unexplained alternative >= confidence', rep
         return _cause(res, rep), rep
     except Exception as e:
         return 'CRASH:' + type(e).__name__ + ':' + str(e)[:120], None

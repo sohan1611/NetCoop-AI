@@ -19,6 +19,7 @@ by ``correlation_id``; after two rounds the agent always returns a FINDING.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from statistics import median
 from typing import Any
 
@@ -91,6 +92,8 @@ class _Candidate:
     support: float
     rank: float
     observations: dict[str, _Observation]
+    telemetry: dict[str, Any] | None = None
+    limitations: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -338,7 +341,69 @@ def _observe_metric(
         ))
     if not observations:
         return None
-    return max(observations, key=lambda item: item.grade)
+    # Normal must account for the worst reading, including a lone bad device.
+    return (min if normal else max)(observations, key=lambda item: item.grade)
+
+
+def _instant(value: Any) -> float | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return stamp.replace(tzinfo=stamp.tzinfo or timezone.utc).timestamp()
+    except (ValueError, OverflowError, OSError):
+        return None
+
+
+def _local_scopes(telemetry: dict[str, Any], active: set[str]):
+    """Join direct neighbours within five minutes; index rows once per signature.
+
+    Device/service rows are collection-time snapshots. Missing timestamps never
+    connect those snapshots to an arbitrary historical sample.
+    """
+    sections = ("devices", "samples", "services")
+    indexed: dict[str, dict[str, list[tuple[float | None, dict]]]] = {}
+    reference = _instant(telemetry.get("collected_at"))
+    if reference is None:
+        reference = max((stamp for row in telemetry.get("samples", [])
+                         if (stamp := _instant(row.get("timestamp"))) is not None), default=None)
+    for section in sections:
+        for row in telemetry.get(section, []):
+            device = row.get("server_id" if section == "services" else "device_id")
+            if not isinstance(device, str):
+                continue
+            stamp = _instant(row.get("timestamp")) if section == "samples" else reference
+            indexed.setdefault(device, {}).setdefault(section, []).append((stamp, row))
+    topology = telemetry.get("topology", {})
+    declared = {node.get("id") for node in topology.get("nodes", [])}
+    neighbors: dict[str, set[str]] = {}
+    for link in topology.get("links", []):
+        src, dst = link.get("src"), link.get("dst")
+        if src in declared and dst in declared:
+            neighbors.setdefault(src, set()).add(dst)
+            neighbors.setdefault(dst, set()).add(src)
+    centers = active | {neighbor for device in active for neighbor in neighbors.get(device, ())}
+    seen: set[tuple[frozenset[str], float | None]] = set()
+    for center in sorted(centers):
+        location = frozenset({center, *neighbors.get(center, ())})
+        rows = {
+            section: [item for device in sorted(location)
+                      for item in indexed.get(device, {}).get(section, [])]
+            for section in sections
+        }
+        moments = {stamp for items in rows.values() for stamp, _ in items}
+        for moment in sorted(moments, key=lambda stamp: (stamp is not None, stamp or 0)):
+            key = (location, moment)
+            if key in seen:
+                continue
+            seen.add(key)
+            yield {
+                **telemetry,
+                **{section: [row for stamp, row in items
+                             if (stamp == moment if stamp is None or moment is None
+                                 else abs(stamp - moment) <= 300)]
+                   for section, items in rows.items()},
+            }
 
 
 def _hypothesis_scores(finding: dict[str, Any]) -> dict[str, float]:
@@ -401,6 +466,8 @@ def _candidate(
     quality_issues: list[str],
     tops: dict[str, str],
     device_down: bool = False,
+    *,
+    local: bool = True,
 ) -> _Candidate:
     signature = SIGNATURES[cause]
     critical_status = any("severity critical" in issue for issue in quality_issues)
@@ -429,6 +496,10 @@ def _candidate(
             and len(observations) / len(signature) >= MIN_SIGNATURE_COVERAGE):
         total_weight = sum(weight for metric, weight in signature if metric in observations)
     match = _clamp(weighted_match / total_weight) if total_weight else 0.0
+    if cause == "normal" and observations:
+        # A device is only as healthy as its worst metric; averages can hide
+        # a warning behind its own healthy metrics or the rest of the fleet.
+        match = min(match, min(observation.grade for observation in observations.values()))
     if cause == "normal" and (device_down or critical_status or any(
         (bad := _observe_metric(telemetry, metric, normal=False,
                                 critical_status=critical_status)) is not None
@@ -441,6 +512,27 @@ def _candidate(
     confidence = _clamp(
         match * (0.5 + 0.5 * coverage) * dq_factor * agreement
     )
+    if cause == "congestion" and (
+        observations.get("link_utilization_pct") is None
+        or observations["link_utilization_pct"].grade <= 0
+        or sum(item.grade > 0 for item in observations.values()) < 2
+    ):
+        confidence = min(confidence, INSUFFICIENT_CONFIDENCE_THRESHOLD - 0.001)
+    limitations: list[str] = []
+    if cause == "normal":
+        warning_devices = sorted({
+            device for metric in [*(metric for metric, _ in signature), "status"]
+            for value, device in _rows_for_metric(telemetry, metric)
+            if device is not None and (
+                _status_grade(value) > 0 if metric == "status" else
+                (number := _number(value)) is not None
+                and (number <= THRESHOLDS[metric]["warn"] if metric == "rssi_dbm"
+                     else number >= THRESHOLDS[metric]["warn"])
+            )
+        })
+        if warning_devices:
+            confidence = min(confidence, 0.749)
+            limitations.append("warning-grade devices: " + ", ".join(warning_devices))
     support = _agent_support(cause, findings)
     rank = _clamp(
         confidence * (1.0 - AGENT_SUPPORT_RANK_WEIGHT)
@@ -448,7 +540,7 @@ def _candidate(
     )
     if cause == "normal" and match == 0.0 and observations:
         rank = 0.0
-    return _Candidate(
+    candidate = _Candidate(
         cause=cause,
         match=match,
         coverage=coverage,
@@ -457,7 +549,33 @@ def _candidate(
         support=support,
         rank=rank,
         observations=observations,
+        limitations=limitations,
     )
+    if local and cause != "normal" and any(item.grade > 0 for item in observations.values()):
+        active = {
+            device for metric, _ in signature
+            for grade, device in _graded_rows(telemetry, metric, critical_status)
+            if grade > 0 and device is not None
+        }
+        best = None
+        for scope in _local_scopes(telemetry, active):
+            item = _candidate(cause, scope, findings, dq_factor, quality_issues, tops,
+                              _device_down(scope), local=False)
+            item.telemetry = scope
+            if best is None or (item.rank, item.coverage) > (best.rank, best.coverage):
+                best = item
+        if best is not None:
+            candidate = best
+        global_support = sum(item.grade > 0 for item in observations.values())
+        local_support = sum(item.grade > 0 for item in candidate.observations.values())
+        if global_support > 1 and (
+            local_support < 2 or (cause == "congestion"
+                                 and _grade(candidate, "link_utilization_pct") <= 0)
+        ):
+            candidate.confidence = min(candidate.confidence, INSUFFICIENT_CONFIDENCE_THRESHOLD - 0.001)
+            candidate.rank = min(candidate.rank, candidate.confidence)
+            candidate.limitations.append("evidence from unrelated devices/times")
+    return candidate
 
 
 def _grade(candidate: _Candidate, metric: str) -> float:
@@ -555,6 +673,10 @@ def _score(context: _RunContext) -> _ScoreResult:
         )
         for cause in SIGNATURES
     ]
+    for candidate in candidates:
+        for limitation in candidate.limitations:
+            if limitation not in context.limitations:
+                context.limitations.append(limitation)
     winner, resolution = _select_winner(candidates, quality_issues, device_down)
     remaining = sorted(
         (candidate for candidate in candidates if candidate is not winner),
@@ -563,7 +685,10 @@ def _score(context: _RunContext) -> _ScoreResult:
     ordered = [winner, *remaining]
     runner = remaining[0] if remaining else None
     margin = winner.rank - runner.rank if runner is not None else winner.rank
-    conflicts = _conflict_messages(tops, winner, runner)
+    conflicts = list(dict.fromkeys([
+        *_conflict_messages(tops, winner, runner),
+        *(limitation for candidate in candidates for limitation in candidate.limitations),
+    ]))
     if resolution is not None:
         conflicts.append(f"Conflict resolved by domain rule: {resolution}")
     higher = [item for item in remaining if item.confidence >= winner.confidence > 0.0]
@@ -921,15 +1046,24 @@ class CorrelatorAgent(Agent):
         evidence, sources = self._supporting_evidence(context, winner)
         affected = self._affected_devices(context, winner)
         evidence = _enrich_evidence(evidence, context.telemetry, affected)
-        alternatives = [
-            {
+        alternatives = []
+        for candidate in result.ordered[1:]:
+            overruled = (
+                not insufficient and result.resolution is not None
+                and candidate.confidence >= confidence
+            )
+            if not overruled and not (
+                candidate.confidence < confidence
+                and confidence - candidate.confidence <= ALTERNATIVE_CONFIDENCE_WINDOW
+            ):
+                continue
+            alternative = {
                 "cause": candidate.cause,
                 "confidence": round(candidate.confidence, 6),
             }
-            for candidate in result.ordered[1:]
-            if candidate.confidence < confidence
-            and confidence - candidate.confidence <= ALTERNATIVE_CONFIDENCE_WINDOW
-        ]
+            if overruled:
+                alternative["overruled_by"] = result.resolution
+            alternatives.append(alternative)
         _, _, quality_payload = _quality_details(context.findings)
         finding = Finding(
             agent=self.name,
@@ -979,6 +1113,14 @@ class CorrelatorAgent(Agent):
         self, context: _RunContext, winner: _Candidate
     ) -> tuple[list[dict[str, Any]], list[str]]:
         signature = dict(SIGNATURES[winner.cause])
+        scoped_values = ({
+            metric: set(_rows_for_metric(winner.telemetry, metric))
+            for metric in signature
+        } if winner.telemetry is not None else None)
+        scoped_times = ({
+            (row.get("device_id"), _instant(row.get("timestamp")))
+            for row in winner.telemetry.get("samples", [])
+        } if winner.telemetry is not None else None)
         ranked: list[tuple[float, dict[str, Any], str | None]] = []
         seen: set[tuple[str, str | None, Any]] = set()
         for agent, finding in context.findings.items():
@@ -992,6 +1134,13 @@ class CorrelatorAgent(Agent):
                 if not isinstance(metric, str) or metric not in signature:
                     continue
                 key = (metric, payload.get("device_id"), payload.get("value"))
+                if scoped_values is not None:
+                    if (payload.get("value"), payload.get("device_id")) not in scoped_values[metric]:
+                        continue
+                    if (metric not in _DEVICE_METRICS and _service_parts(metric) is None
+                            and payload.get("timestamp") is not None
+                            and (payload.get("device_id"), _instant(payload["timestamp"])) not in scoped_times):
+                        continue
                 if key in seen:
                     continue
                 seen.add(key)
@@ -1000,7 +1149,7 @@ class CorrelatorAgent(Agent):
                 ranked.append((signature[metric] * grade, payload, agent))
 
         for metric, observation in winner.observations.items():
-            if any(item[1].get("metric") == metric for item in ranked):
+            if (metric, observation.device_id, observation.value) in seen:
                 continue
             limits = THRESHOLDS.get(metric)
             service_parts = _service_parts(metric)
@@ -1043,7 +1192,7 @@ class CorrelatorAgent(Agent):
         critical_status = any("severity critical" in issue for issue in quality_issues)
         graded: dict[str, float] = {}
         for metric, _ in SIGNATURES[winner.cause]:
-            for grade, device_id in _graded_rows(context.telemetry, metric, critical_status):
+            for grade, device_id in _graded_rows(winner.telemetry or context.telemetry, metric, critical_status):
                 if grade > 0 and device_id is not None:
                     graded[device_id] = max(graded.get(device_id, 0.0), grade)
         devices = [d for d, _ in sorted(graded.items(), key=lambda item: -item[1])]
