@@ -99,6 +99,33 @@
     </section>
     <div id="report-layout" class="report-layout">
       <div id="report-column" class="report-column">
+        <!-- GROUP 3: unified report; child ids are stable renderer targets. -->
+        <section class="card diagnostic-report is-idle" id="report" aria-labelledby="report-title">
+          <header class="report-heading">
+            <h2 id="report-title"><svg class="icon"><use href="#icon-activity"/></svg>Unified Diagnostic Report</h2>
+            <span id="correlation-hash" class="report-chip mono">CORRELATION HASH: —</span>
+            <span id="format-normalization" class="report-chip normalization-chip mono">Format Normalization: —</span>
+          </header>
+          <p id="report-state" class="muted" role="status"></p>
+          <div id="report-content">
+            <div id="summary" class="root-cause"></div>
+            <section id="affected-section" class="report-section"><h3><svg class="icon"><use href="#icon-network"/></svg>Affected Devices &amp; Campus Network Segments</h3><div id="affected-devices" class="affected-grid"></div></section>
+            <section id="evidence-section" class="report-section">
+              <header class="section-heading"><h3><svg class="icon"><use href="#icon-activity"/></svg>Supporting Evidence &amp; Telemetry Findings</h3><span id="sample-window" class="mono section-note">—</span></header>
+              <div id="evidence" class="evidence-grid"></div>
+              <div class="table-scroll telemetry-scroll" tabindex="0" role="region" aria-label="Normalized telemetry mappings"><table id="telemetry-table"><thead><tr><th>Telemetry Feed</th><th>Source Device</th><th>Raw Payload Fragment</th><th>Normalized Metric</th></tr></thead><tbody id="telemetry-rows"></tbody></table></div>
+              <p id="telemetry-empty" class="muted"></p>
+            </section>
+            <section id="hypotheses-section" class="report-section"><h3><svg class="icon"><use href="#icon-workflow"/></svg>Hypothesis Confidence &amp; Alternative Explanations Evaluated</h3><div id="primary-hypothesis" class="primary-hypothesis"></div><div id="alts" class="alternative-grid"></div></section>
+            <section id="actions-section" class="report-section"><header class="section-heading"><h3><svg class="icon"><use href="#icon-settings"/></svg>Recommended Corrective Actions</h3><span class="mono section-note cyan">VALIDATED BY PLAYBOOK</span></header><ol id="actions" class="action-list"></ol><div id="fixresult" role="status"></div></section>
+          </div>
+        </section>
+      </div>
+      <!-- GROUP 4: latency trend, stat tiles and agent bus. -->
+      <aside id="right-rail" class="right-rail" aria-label="Diagnostic metrics"><div id="latency-trend"></div><div id="rail-stats"></div><div id="agent-bus"></div></aside>
+    </div>
+    <!-- GROUP 5: legacy controls and views remain reachable until replaced. -->
+    <div id="legacy-workflow" class="report-column">
         <!-- Legacy workflow remains reachable until Groups 2–5 replace it. -->
         <section id="run-controls" class="card controls" tabindex="-1">
           <label>Scenario<select id="scenario"></select></label>
@@ -108,18 +135,6 @@
         </section>
         <section id="legacy-timeline" class="card" tabindex="-1"><h2>Agent messages</h2><ol id="timeline" class="timeline"><li class="muted">No run yet.</li></ol></section>
         <section id="legacy-topology" class="card" tabindex="-1"><h2>Topology</h2><div id="topo"></div><p class="muted legend"><span class="dot bad"></span> affected <span class="dot ok"></span> other</p></section>
-        <!-- GROUP 3: replace legacy report contents inside this stable section. -->
-        <section class="card" id="report" hidden>
-          <h2>Diagnosis</h2><div id="summary"></div>
-          <h3>Evidence</h3><ul id="evidence"></ul>
-          <h3>Recommended actions</h3><ul id="actions"></ul>
-          <h3>Alternatives</h3><ul id="alts"></ul>
-          <h3>Limitations</h3><ul id="limits"></ul>
-          <button id="fix" hidden>Approve simulated fix</button><div id="fixresult" role="status"></div>
-        </section>
-      </div>
-      <!-- GROUP 4: latency trend, stat tiles and agent bus. -->
-      <aside id="right-rail" class="right-rail" aria-label="Diagnostic metrics"><div id="latency-trend"></div><div id="rail-stats"></div><div id="agent-bus"></div></aside>
     </div>
   </div>
   <!-- GROUP 5: full view content and run/remediation modals. -->
@@ -134,7 +149,14 @@
   <section id="view-settings" class="view card" data-view-panel="settings" hidden><h2>System Settings</h2><p class="muted">Settings view pending.</p></section>
 </main>
 <div id="run-modal-root"><!-- GROUP 5: run modal --></div>
-<div id="remediate-modal-root"><!-- GROUP 5: simulated remediation confirmation --></div>
+<div id="remediate-modal-root">
+  <dialog id="remediate-modal" aria-labelledby="remediate-title" aria-describedby="remediate-description">
+    <h2 id="remediate-title">Simulated remediation</h2>
+    <p id="remediate-description">Apply the playbook to a copy of this run’s telemetry and diagnose the simulated result.</p>
+    <p id="remediate-target" class="mono muted"></p>
+    <div class="modal-actions"><button id="remediate-cancel" class="button outline">Cancel</button><button id="remediate-confirm" class="button primary">Apply Simulated Remediation</button></div>
+  </dialog>
+</div>
 <script src="app.js"></script>
 </body>
 </html>

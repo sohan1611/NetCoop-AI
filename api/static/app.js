@@ -3,7 +3,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   runId: null, health: null, runs: null, report: null, details: null,
   messages: [], topology: null, view: 'console', search: '', acknowledged: readAcknowledged(),
-  running: false, scenariosReady: false,
+  running: false, scenariosReady: false, remediation: null, remediating: false,
 };
 let cy = null, source = null;
 const ACK_KEY = 'netcoop.acknowledged';
@@ -172,17 +172,13 @@ function renderSearch() {
     row.hidden = !row.textContent.toLowerCase().includes(state.search);
   });
 }
-function renderShell() { renderTopBar(); renderSidebar(); renderHero(); renderPipeline(); }
+function renderShell() { renderTopBar(); renderSidebar(); renderHero(); renderPipeline(); renderReport(); }
 
 function el(tag, text, cls) {
   const e = document.createElement(tag);
   if (text !== undefined) e.textContent = text;
   if (cls) e.className = cls;
   return e;
-}
-function fill(id, items, fmt) {
-  const ul = $(id); ul.replaceChildren();
-  (items && items.length ? items : ['None']).forEach((i) => ul.append(el('li', items && items.length ? fmt(i) : i)));
 }
 async function json(url, opts) {
   const r = await fetch(url, opts);
@@ -216,7 +212,7 @@ async function loadRunData() {
   ]);
   state.details = results[0].status === 'fulfilled' ? results[0].value : null;
   state.topology = results[1].status === 'fulfilled' ? results[1].value : null;
-  renderShell(); renderReport(); drawTopology(); renderSearch();
+  renderShell(); drawTopology(); renderSearch();
 }
 function subscribeRun() {
   source = new EventSource(`/api/runs/${state.runId}/stream`);
@@ -286,31 +282,173 @@ function drawTopology() {
   });
 }
 
-function renderReport() {
-  const r = state.report;
-  if (!r) { $('report').hidden = true; return; }
-  $('report').hidden = false;
-  const s = $('summary'); s.replaceChildren();
-  s.append(el('div', r.suspected_root_cause || '—', 'big'));
-  const confidence = Number.isFinite(r.confidence) ? (r.confidence * 100).toFixed(0) + '%' : '—';
-  const meta = el('div', 'cause: ' + (r.cause || '—') + ' · confidence ' + confidence);
-  meta.append(el('span', r.confidence_category || '—', 'pill'), el('span', r.status || '—', 'pill'));
-  s.append(meta, el('div', 'Affected: ' + ((r.affected_devices || []).join(', ') || '—'), 'muted'));
-  fill('evidence', r.supporting_evidence, (e) =>
-    `${e.device_id ? e.device_id + ' · ' : ''}${e.metric} = ${e.value}${e.unit ? ' ' + e.unit : ''} — ${e.interpretation || ''}`);
-  fill('actions', r.recommended_actions, (a) => (typeof a === 'string' ? a : JSON.stringify(a)));
-  fill('alts', r.alternative_causes, (a) => (typeof a === 'string' ? a : `${a.cause || a.name}: ${a.confidence ?? a.score ?? ''}`));
-  fill('limits', r.limitations, (x) => x);
-  $('fixresult').textContent = '';
-  $('fix').hidden = !['congestion', 'weak_wifi', 'interface_fault', 'device_overload', 'dns_failure',
-    'dhcp_failure', 'hardware_failure', 'latency_degradation'].includes(r.cause);
+// GROUP 3: report renderers consume only state.report and state.details.
+const REMEDIABLE_CAUSES = new Set(['congestion', 'weak_wifi', 'interface_fault', 'device_overload',
+  'dns_failure', 'dhcp_failure', 'hardware_failure', 'latency_degradation']);
+const display = (value) => value === null || value === undefined || value === '' ? '—' : String(value);
+const percent = (value) => Number.isFinite(value) ? Math.round(value * 100) + '%' : '—';
+function metricText(metric, value, unit) {
+  return display(metric) + ' = ' + display(value) + (unit ? ' ' + unit : '');
 }
+function evidenceTone(e) {
+  const device = state.details?.devices?.find((d) => d.device_id === e.device_id && d.worst_metric === e.metric);
+  if (device) return device.severity === 'critical' ? 'alert' : device.severity === 'warning' ? 'flagged' : 'complete';
+  return /critical/i.test(e.interpretation || '') ? 'alert' : /warning/i.test(e.interpretation || '') ? 'flagged' : '';
+}
+function empty(container, message) { container.append(el('p', message, 'muted empty-state')); }
+function renderReport() {
+  const r = state.report, d = state.details;
+  $('report').hidden = false;
+  $('report').classList.toggle('is-idle', !r && !state.running && !state.runId);
+  $('report').setAttribute('aria-busy', String(state.running));
+  $('report-state').textContent = !r ? state.running ? 'Agents correlating…' : state.runId ? 'No report available.' : '' : '';
+  $('report-state').hidden = !!r || (!state.running && !state.runId);
+  $('report-content').hidden = !r && (state.running || !!state.runId);
+  $('correlation-hash').textContent = 'CORRELATION HASH: ' + (r?.run_id ? '#' + r.run_id : '—');
+  const formats = d?.formats || [], mappings = d?.mappings || [];
+  const availableFormats = [...new Set([...formats, ...mappings.map((m) => m.source_format)].filter(Boolean))];
+  $('format-normalization').textContent = 'Format Normalization: ' + (availableFormats.length ?
+    availableFormats.length + ' conflicting formats (' + availableFormats.join(', ') + ')' : '—');
+  renderRootCause(); renderAffectedDevices(); renderEvidence(); renderTelemetry(); renderHypotheses(); renderActions();
+  renderSearch();
+}
+function renderRootCause() {
+  const r = state.report, w = state.details?.window, box = $('summary');
+  box.replaceChildren();
+  const exceptional = r && ['insufficient_evidence', 'error'].includes(r.status);
+  box.className = 'root-cause' + (exceptional ? r.status === 'error' ? ' error' : ' insufficient' : '');
+  const label = el('p', exceptional ? display(r.status).replaceAll('_', ' ').toUpperCase() : 'SYNTHESIZED PROBABLE ROOT CAUSE', 'mono callout-label');
+  label.append(el('strong', r?.cause ? ' / ' + r.cause.replaceAll('_', ' ') : ''));
+  const cause = exceptional ? (r.limitations?.join('; ') || '—') : r?.suspected_root_cause;
+  box.append(label, el('p', cause ? '“' + cause + '”' : '—', 'root-cause-text'));
+  if (!exceptional) box.append(el('p', r?.affected_devices?.length ? 'Affected devices: ' + r.affected_devices.join(', ') : '—', 'affected-sentence'));
+  const meta = el('div', undefined, 'callout-meta');
+  meta.append(el('span', 'Trigger Window: ' + display(w?.first) + ' – ' + display(w?.last)),
+    el('span', 'Multi-Agent Consensus: ' + percent(r?.confidence) + ' ' + display(r?.confidence_category) + ' Confidence'));
+  box.append(meta);
+  if (!exceptional && r?.limitations?.length) box.append(el('p', 'Limitations: ' + r.limitations.join('; '), 'muted report-limitations'));
+}
+function renderAffectedDevices() {
+  const grid = $('affected-devices'), ids = state.report?.affected_devices || [];
+  grid.replaceChildren();
+  ids.slice(0, 3).forEach((id) => {
+    const d = state.details?.devices?.find((device) => device.device_id === id);
+    const card = el('article', undefined, 'device-card');
+    card.append(el('span', display(d?.role || d?.type), 'mono stat-label'), el('strong', id),
+      el('p', [d?.location, d?.type].filter(Boolean).join(' · ') || '—', 'device-description'));
+    card.append(el('span', d?.worst_metric ? metricText(d.worst_metric, d.worst_value, d.unit) : '—',
+      'pill ' + (d?.severity === 'critical' ? 'alert' : d?.severity === 'warning' ? 'flagged' : '')));
+    grid.append(card);
+  });
+  if (!ids.length) empty(grid, state.report ? 'No affected devices identified.' : '—');
+  if (ids.length > 3) grid.append(el('p', '+' + (ids.length - 3) + ' more', 'muted more-devices'));
+}
+function renderEvidence() {
+  const grid = $('evidence'), rows = state.report?.supporting_evidence || [];
+  grid.replaceChildren();
+  $('sample-window').textContent = Number.isFinite(state.details?.window?.seconds) ?
+    'SAMPLED OVER ' + state.details.window.seconds + ' SECONDS' : 'SAMPLED OVER — SECONDS';
+  rows.slice(0, 5).forEach((e) => {
+    const tile = el('article', undefined, 'evidence-tile');
+    tile.dataset.searchable = '';
+    tile.append(el('span', display(e.metric).replaceAll('_', ' '), 'mono stat-label'),
+      el('strong', display(e.value) + (e.unit ? ' ' + e.unit : ''), 'metric-value ' + evidenceTone(e)),
+      el('span', e.baseline != null ? 'Baseline: ' + e.baseline + (e.unit ? ' ' + e.unit : '') :
+        e.threshold != null ? 'Threshold: ' + e.threshold + (e.unit ? ' ' + e.unit : '') : '—', 'mono evidence-detail'),
+      el('span', display(e.device_id), 'mono evidence-detail'));
+    tile.title = e.interpretation || ''; grid.append(tile);
+  });
+  if (!rows.length) empty(grid, state.report ? 'No supporting evidence available.' : '—');
+}
+function renderTelemetry() {
+  const body = $('telemetry-rows'), affected = new Set(state.report?.affected_devices || []);
+  const rows = (state.details?.mappings || []).filter((m) => affected.has(m.device_id));
+  body.replaceChildren();
+  rows.forEach((m) => {
+    const row = el('tr'); row.dataset.searchable = '';
+    row.append(el('td', display(m.source_format), 'telemetry-feed'), el('td', display(m.device_id)),
+      el('td', display(m.raw_path) + ' = ' + display(m.raw_value), 'raw-fragment'),
+      el('td', metricText(m.metric, m.value, m.unit), evidenceTone(m)));
+    row.title = m.note || ''; body.append(row);
+  });
+  $('telemetry-empty').textContent = rows.length ? '' : state.report ? 'No normalization mappings for affected devices.' : '—';
+  $('telemetry-empty').hidden = !!rows.length;
+}
+function confidenceBar(value) {
+  const bar = el('div', undefined, 'confidence-track');
+  bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-label', 'Hypothesis confidence');
+  bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', '100');
+  const fill = el('span');
+  if (Number.isFinite(value)) { const p = Math.max(0, Math.min(100, value * 100)); fill.style.width = p + '%'; bar.setAttribute('aria-valuenow', String(p)); }
+  else { fill.style.width = '0%'; bar.setAttribute('aria-valuetext', 'Unavailable'); }
+  bar.append(fill); return bar;
+}
+function renderHypotheses() {
+  const r = state.report, d = state.details, primary = $('primary-hypothesis'), grid = $('alts');
+  primary.replaceChildren(); grid.replaceChildren();
+  primary.append(el('p', 'Primary Hypothesis: ' + display(r?.cause) + ' on ' + (r?.affected_devices?.join(', ') || '—') +
+    ' — ' + percent(r?.confidence) + ' (' + display(r?.confidence_category) + ')', 'primary-title mono'),
+    confidenceBar(r?.confidence), el('p', d?.primary_rationale || '—', 'hypothesis-rationale'));
+  const alternatives = d?.alternatives?.length ? d.alternatives : (r?.alternative_causes || []).map((cause) => ({ cause }));
+  alternatives.forEach((a) => {
+    const known = Number.isFinite(a.confidence), ruledOut = known && a.confidence < 0.2;
+    const card = el('article', undefined, 'alternative-card' + (known ? ruledOut ? ' ruled-out' : ' partial' : ''));
+    const heading = el('div', undefined, 'alternative-heading');
+    heading.append(el('strong', display(a.cause)), el('span', percent(a.confidence) + ' Probability', 'mono'));
+    const rationale = el('p', undefined, 'hypothesis-rationale');
+    rationale.append(el('strong', known ? ruledOut ? 'Ruled Out: ' : 'Partial Contributor: ' : '— '), el('span', a.rationale || '—'));
+    card.append(heading, confidenceBar(a.confidence), rationale); grid.append(card);
+  });
+  if (!alternatives.length) empty(grid, r ? 'No alternative explanations reported.' : '—');
+}
+function canRemediate() {
+  return !!state.runId && !state.running && !state.remediating && state.report?.status === 'diagnosed' && REMEDIABLE_CAUSES.has(state.report?.cause);
+}
+function renderActions() {
+  const list = $('actions'); list.replaceChildren();
+  (state.report?.recommended_actions || []).forEach((action, i) => {
+    const row = el('li', undefined, 'action-row'), copy = el('div', undefined, 'action-copy');
+    // The API provides a single runbook string, so retain it intact without invented descriptions.
+    copy.append(el('strong', action), el('span', i === 0 ? 'Simulated playbook execution' : 'Runbook step', 'muted'));
+    const button = el('button', i === 0 ? 'Apply Simulated Remediation' : 'Copy Runbook Step', 'button ' + (i === 0 ? 'primary' : 'outline'));
+    if (i === 0) { button.id = 'fix'; button.disabled = !canRemediate(); button.onclick = window.openRemediateModal; }
+    else button.onclick = async () => {
+      try { await navigator.clipboard.writeText(action); button.textContent = 'Copied'; }
+      catch { $('fixresult').textContent = 'Clipboard unavailable. Select and copy the runbook step.'; }
+    };
+    row.append(el('span', String(i + 1), 'action-number mono'), copy, button); list.append(row);
+  });
+  if (!list.children.length) empty(list, state.report ? 'No corrective actions reported.' : '—');
+  const result = state.remediation;
+  $('fixresult').textContent = result ? result.error ? 'Simulated remediation error: ' + result.error :
+    'Simulated remediation: ' + display(result.before) + ' → ' + display(result.after) + ' — verified ' + (result.verified ? '✓' : '✗') : '';
+  $('fixresult').className = result ? 'remediation-result ' + (result.verified ? 'pass' : 'fail') : '';
+}
+window.openRemediateModal = () => {
+  if (!canRemediate()) { $('status').textContent = 'Run a supported diagnosis to approve simulated remediation.'; return; }
+  $('remediate-target').textContent = 'Run: ' + state.runId + ' · Cause: ' + display(state.report.cause);
+  $('remediate-modal').dataset.runId = state.runId;
+  if (!$('remediate-modal').open) $('remediate-modal').showModal();
+  $('remediate-cancel').focus();
+};
+// Remediation transport stays alongside the single run/report data-loading layer.
+async function remediateRun(runId) { return json('/api/runs/' + runId + '/remediate', { method: 'POST' }); }
+$('remediate-cancel').onclick = () => $('remediate-modal').close();
+$('remediate-confirm').onclick = async () => {
+  const runId = $('remediate-modal').dataset.runId;
+  if (runId !== state.runId || !canRemediate()) { $('remediate-modal').close(); return; }
+  state.remediating = true; $('remediate-modal').close(); renderActions();
+  try { const result = await remediateRun(runId); if (runId === state.runId) state.remediation = result; }
+  catch (err) { if (runId === state.runId) state.remediation = { error: err.message }; }
+  finally { state.remediating = false; renderActions(); await refreshShellData(); }
+};
 
 async function run() {
   if (state.running) return;
   state.running = true;
   closeExportMenu();
-  $('run').disabled = true; $('status').textContent = 'Starting…'; $('report').hidden = true;
+  $('run').disabled = true; $('status').textContent = 'Starting…';
+  state.remediation = null; $('remediate-modal').close();
   state.runId = null; state.report = null; state.details = null; state.topology = null; state.messages = [];
   if (cy) { cy.destroy(); cy = null; }
   $('topo').textContent = '';
@@ -372,17 +510,6 @@ document.addEventListener('click', (event) => { if (!event.target.closest('.expo
 // Keep relative sweep time current without refetching the finished run.
 setInterval(() => { if (state.details?.finished_at) renderHero(); }, 1000);
 $('run').onclick = run;
-$('fix').onclick = async () => {
-  $('fix').disabled = true;
-  try {
-    const r = await json(`/api/runs/${state.runId}/remediate`, { method: 'POST' });
-    const out = $('fixresult');
-    out.textContent = `Simulated fix: ${r.before} → ${r.after} — ${r.verified ? 'verified' : 'NOT verified'}`;
-    out.className = r.verified ? 'pass' : 'fail';
-  } catch (err) { $('fixresult').textContent = 'Error: ' + err.message; $('fixresult').className = 'fail'; }
-  $('fix').disabled = false;
-  await refreshShellData();
-};
 document.querySelectorAll('[data-view-target]').forEach((button) => {
   button.addEventListener('click', (event) => {
     event.preventDefault(); setView(button.dataset.viewTarget);
@@ -401,12 +528,7 @@ $('spawn-run').onclick = () => {
   if (typeof window.openRunModal === 'function') { window.openRunModal(); return; }
   setView('console'); $('run-controls').scrollIntoView({ block: 'start' }); $('scenario').focus();
 };
-$('quarantine').onclick = () => {
-  if (typeof window.openRemediateModal === 'function') { window.openRemediateModal(); return; }
-  setView('console');
-  if (!$('fix').hidden) { $('fix').scrollIntoView({ block: 'center' }); $('fix').focus(); }
-  else { $('status').textContent = 'Run a supported diagnosis to approve simulated remediation.'; $('run-controls').scrollIntoView({ block: 'start' }); }
-};
+$('quarantine').onclick = () => window.openRemediateModal();
 $('acknowledge-all').onclick = () => {
   // Acknowledge all currently listed incidents, including the selected run.
   const runs = [...(state.runs || [])];
