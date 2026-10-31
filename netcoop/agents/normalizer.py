@@ -37,6 +37,9 @@ FIELD_ALIASES: dict[str, str] = {
     "util": "link_utilization_pct",
     "utilization": "link_utilization_pct",
     "link_util": "link_utilization_pct",
+    "link_utilization": "link_utilization_pct",
+    "queue_drop": "queue_drops",
+    "interface_error": "interface_errors",
     "throughput": "throughput_mbps",
     "bandwidth": "bandwidth_mbps",
     "capacity": "capacity_mbps",
@@ -136,6 +139,7 @@ NUMERIC_FIELDS = {
     "retransmission_pct", "success_rate_pct", "response_ms",
 }
 PERCENT_FIELDS = {name for name in NUMERIC_FIELDS if name.endswith("_pct")}
+TIME_FIELDS = {"latency_ms", "jitter_ms", "response_ms"}
 NON_NEGATIVE_FIELDS = NUMERIC_FIELDS - {"rssi_dbm"} - PERCENT_FIELDS
 TOP_LEVEL_ALIASES = {
     "schemaVersion": "schema_version", "incident": "incident_id",
@@ -187,7 +191,30 @@ def _parse_raw(raw: str | bytes | dict | list) -> dict[str, Any] | list[Any]:
     return raw
 
 
+def _canonical_key(key: str) -> str:
+    """CamelCase / spaced / dashed names -> lower snake_case."""
+    key = re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", "_", key)
+    return re.sub(r"[\s.\-]+", "_", key).strip("_").lower()
+
+
 def _resolve_field(raw_key: str, section: str) -> tuple[str | None, float]:
+    target, factor = _resolve_exact(raw_key, section)
+    if target is not None:
+        return target, factor
+    canonical = _canonical_key(raw_key)
+    if canonical != raw_key:
+        target, factor = _resolve_exact(canonical, section)
+        if target is not None:
+            return target, factor
+    for suffix in ("_pct", "_ms"):
+        if canonical.endswith(suffix):
+            target, factor = _resolve_exact(canonical[: -len(suffix)], section)
+            if target is not None:
+                return target, factor
+    return None, 1.0
+
+
+def _resolve_exact(raw_key: str, section: str) -> tuple[str | None, float]:
     if raw_key in UNIT_CONVERSIONS:
         target, factor = UNIT_CONVERSIONS[raw_key]
         return (target, factor) if target in SECTION_FIELDS[section] else (None, 1.0)
@@ -589,7 +616,8 @@ def _validate_rows(telemetry: dict[str, Any], tracker: _QualityTracker) -> None:
                                 f"out-of-range value at {section}[{index}].{field_name}: {value}")
             for field_name in NON_NEGATIVE_FIELDS & row.keys():
                 value = row[field_name]
-                if value < 0:
+                limit = 60000 if field_name in TIME_FIELDS else 1e9
+                if value < 0 or value > limit:
                     tracker.add("out_of_range",
                                 f"out-of-range value at {section}[{index}].{field_name}: {value}")
 
@@ -626,6 +654,12 @@ def normalize(raw: str | bytes | dict | list, use_llm: bool = False) -> Normaliz
     tracker = _QualityTracker(use_llm=use_llm)
     try:
         source = _parse_raw(raw)
+        if isinstance(source, dict) and not source.keys() & (TOP_LEVEL_FIELDS | {"metrics", "nodes", "readings"}):
+            for wrapper in ("records", "data", "telemetry", "items"):
+                if isinstance(source.get(wrapper), list):
+                    tracker.add("coerced", f"unwrapped records from root.{wrapper}")
+                    source = source[wrapper]
+                    break
         if isinstance(source, list):
             telemetry = _normalize_organizer(source, tracker)
         elif "metrics" in source:

@@ -1,5 +1,6 @@
 ﻿import asyncio
 
+import pytest
 from netcoop.agents.normalizer import NormalizerAgent, normalize
 from netcoop.protocol import Envelope, MsgType
 
@@ -232,3 +233,27 @@ def test_clean_organizer_record_has_full_quality_and_high_confidence():
     assert any('missing section topology' in item for item in state.findings['normalizer']['data_quality']['issues'])
     diagnosis = state.findings['correlator']['diagnosis']
     assert diagnosis['cause'] == 'normal' and diagnosis['confidence'] >= 0.7
+
+
+def test_camel_case_metric_names_are_mapped_without_llm():
+    result = normalize({'device_id': 'SW1', 'timestamp': '2026-10-31T09:00:00Z', 'metrics': {
+        'CpuUtilization': 99.9, 'LatencyMs': 700, 'PacketLoss': 20, 'QueueDrops': 9000,
+        'InterfaceErrors': 300, 'LinkUtilization': 100}})
+    device, sample = result.telemetry['devices'][0], result.telemetry['samples'][0]
+    assert (device['cpu_pct'], device['queue_drops'], device['interface_errors']) == (99.9, 9000, 300)
+    assert (sample['latency_ms'], sample['packet_loss_pct'], sample['link_utilization_pct']) == (700, 20, 100)
+    assert not any('unknown field' in issue for issue in result.data_quality.issues)
+
+
+@pytest.mark.parametrize('wrapper', ['records', 'data', 'telemetry', 'items'])
+def test_wrapped_record_list_is_unwrapped(wrapper):
+    record = {'device_id': 'SW1', 'timestamp': '2026-10-31T09:00:00Z', 'metrics': {'cpu_utilization_pct': 50}}
+    result = normalize({wrapper: [record]})
+    assert result.telemetry['devices'][0]['cpu_pct'] == 50
+    assert not any('unknown field' in issue for issue in result.data_quality.issues)
+
+
+@pytest.mark.parametrize('field,value', [('latency_ms', 70000), ('queue_drops', 2e9), ('packet_loss_pct', 150)])
+def test_impossible_values_are_flagged(field, value):
+    result = normalize({'device_id': 'SW1', 'timestamp': '2026-10-31T09:00:00Z', 'metrics': {field: value}})
+    assert any('out-of-range' in issue for issue in result.data_quality.issues)

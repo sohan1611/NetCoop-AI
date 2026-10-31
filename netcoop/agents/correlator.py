@@ -404,7 +404,9 @@ def _conflict_messages(
             f"{agent}={cause}" for agent, cause in sorted(tops.items())
         )
         conflicts.append(f"Agents disagree on their top hypothesis: {summary}")
-    if runner is not None and abs(winner.rank - runner.rank) < QUERY_MARGIN_THRESHOLD:
+    if not winner.observations and (runner is None or not runner.observations):
+        conflicts.append("no usable telemetry samples supplied")
+    elif runner is not None and abs(winner.rank - runner.rank) < QUERY_MARGIN_THRESHOLD:
         conflicts.append(
             f"Leading hypotheses are close: {winner.cause}={winner.confidence:.3f}, "
             f"{runner.cause}={runner.confidence:.3f}"

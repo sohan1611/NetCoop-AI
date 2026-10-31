@@ -117,3 +117,13 @@ def test_org_hardware_failure_without_usable_status(tmp_path, capsys, status):
     report = Report.model_validate_json(capsys.readouterr().out)
     assert code == 0
     assert 'hardware failure' in report.suspected_root_cause
+
+
+def test_empty_input_reports_no_usable_samples(tmp_path, capsys):
+    path = tmp_path / 'empty.json'
+    path.write_text('[]', encoding='utf-8')
+    main(['diagnose', str(path), '--no-llm', '--runs-dir', str(tmp_path / 'runs')])
+    report = Report.model_validate_json(capsys.readouterr().out)
+    assert report.status == 'insufficient_evidence'
+    assert 'no usable telemetry samples supplied' in report.limitations
+    assert not any('Leading hypotheses are close' in item for item in report.limitations)
