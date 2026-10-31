@@ -53,9 +53,11 @@ def _print_report(report: Report, markdown: bool = False) -> int:
     return 2 if report.status == 'error' else 0
 
 
-def _evaluate(directory: Path, no_llm: bool = True) -> int:
+def _evaluate(directory: Path, no_llm: bool = True,
+              output_path: Path | None = None) -> int:
     labels = json.loads((directory / 'labels.json').read_text(encoding='utf-8'))
-    print(f"{'scenario':<30} {'expected':<23} {'got':<23} confidence pass")
+    lines = ['| scenario | expected | got | confidence | pass |',
+             '| --- | --- | --- | --- | --- |']
     passed = 0
     with TemporaryDirectory(prefix='netcoop-evaluate-') as runs_dir:
         for scenario, expected in labels.items():
@@ -65,9 +67,14 @@ def _evaluate(directory: Path, no_llm: bool = True) -> int:
             got = _cause(result, report)
             matched = got == expected
             passed += matched
-            print(f'{scenario:<30} {expected:<23} {got:<23} {report.confidence:.3f}      {matched}')
-    print(f'{passed}/{len(labels)} pass')
-    return 0
+            lines.append(f'| {scenario} | {expected} | {got} | {report.confidence:.3f} | {matched} |')
+    lines.extend(['', f'{passed}/{len(labels)} pass'])
+    table = '\n'.join(lines) + '\n'
+    print(table, end='')
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(table, encoding='utf-8')
+    return 0 if labels and passed * 4 >= len(labels) * 3 else 1
 
 
 def main(argv: list[str] | None = None) -> int:

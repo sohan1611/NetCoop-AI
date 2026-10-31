@@ -162,3 +162,30 @@ def test_full_orchestrator_run_uses_real_correlator(tmp_path: Path):
     assert isinstance(state, RunState)
     assert state.findings["correlator"]["diagnosis"]["cause"] == "congestion"
     assert state.findings["correlator"]["diagnosis"]["status"] == "diagnosed"
+
+
+def test_supporting_evidence_deduplicates_metric_device_value():
+    from netcoop.agents.correlator import _RunContext, _score
+
+    telemetry = normalize(
+        (SCENARIO_DIR / 'congestion.json').read_text(encoding='utf-8')
+    ).telemetry
+    evidence = dict(metric='latency_ms', device_id='r1', value=185,
+                    interpretation='High latency', timestamp='2026-10-31T09:00:00Z')
+    context = _RunContext(
+        run_id='dedupe', requester='orchestrator', telemetry=telemetry,
+        limitations=[], round=2, findings={
+            'performance': {'evidence': [evidence]},
+            'connectivity': {'evidence': [
+                {**evidence, 'interpretation': 'Path delay', 'timestamp': None},
+                {**evidence, 'device_id': 'r2'},
+                {**evidence, 'value': 200},
+            ]},
+        },
+    )
+    selected, _ = CorrelatorAgent()._supporting_evidence(context, _score(context).winner)
+    latency = [item for item in selected if item['metric'] == 'latency_ms']
+    assert [(item['device_id'], item['value']) for item in latency] == [
+        ('r1', 185), ('r2', 185), ('r1', 200),
+    ]
+    assert latency[0]['interpretation'] == 'High latency'

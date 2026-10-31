@@ -825,7 +825,7 @@ class CorrelatorAgent(Agent):
     ) -> tuple[list[dict[str, Any]], list[str]]:
         signature = dict(SIGNATURES[winner.cause])
         ranked: list[tuple[float, dict[str, Any], str | None]] = []
-        seen: set[tuple[str, ...]] = set()
+        seen: set[tuple[str, str | None, Any]] = set()
         for agent, finding in context.findings.items():
             raw_evidence = finding.get("evidence")
             if not isinstance(raw_evidence, list):
@@ -836,7 +836,7 @@ class CorrelatorAgent(Agent):
                 metric = payload.get("metric")
                 if not isinstance(metric, str) or metric not in signature:
                     continue
-                key = _evidence_key(payload)
+                key = (metric, payload.get("device_id"), payload.get("value"))
                 if key in seen:
                     continue
                 seen.add(key)
