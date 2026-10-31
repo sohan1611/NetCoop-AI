@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetCoop AI</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>NetCoop AI <span>multi-agent network fault diagnosis</span></h1>
+</header>
+<main>
+  <section class="card controls">
+    <label>Scenario
+      <select id="scenario"></select>
+    </label>
+    <label>or upload telemetry (JSON)
+      <input type="file" id="file" accept=".json,application/json">
+    </label>
+    <label>Fail an agent (degrade test)
+      <select id="fail">
+        <option value="">none</option>
+        <option>performance</option><option>infrastructure</option><option>connectivity</option><option>correlator</option>
+      </select>
+    </label>
+    <button id="run">Run diagnosis</button>
+    <div id="status" class="muted" role="status"></div>
+  </section>
+
+  <section class="card">
+    <h2>Agent messages</h2>
+    <ol id="timeline" class="timeline"><li class="muted">No run yet.</li></ol>
+  </section>
+
+  <section class="card">
+    <h2>Topology</h2>
+    <div id="topo"></div>
+    <p class="muted legend"><span class="dot bad"></span> affected <span class="dot ok"></span> other</p>
+  </section>
+
+  <section class="card" id="report" hidden>
+    <h2>Diagnosis</h2>
+    <div id="summary"></div>
+    <h3>Evidence</h3><ul id="evidence"></ul>
+    <h3>Recommended actions</h3><ul id="actions"></ul>
+    <h3>Alternatives</h3><ul id="alts"></ul>
+    <h3>Limitations</h3><ul id="limits"></ul>
+    <button id="fix" hidden>Approve simulated fix</button>
+    <div id="fixresult" role="status"></div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

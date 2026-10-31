@@ -213,6 +213,8 @@ def _resolve_field(raw_key: str, section: str) -> tuple[str | None, float]:
 def _convert_value(value: Any, target: str, factor: float,
                    tracker: _QualityTracker, path: str) -> Any:
     if target in NUMERIC_FIELDS:
+        if value is None:
+            return None
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             tracker.add("wrong_type", f"wrong type for {path}; expected a number")
             return None

@@ -191,3 +191,12 @@ def test_handle_returns_finding_with_separate_telemetry_key():
     assert response.payload["notes"] == []
     assert response.payload["data_quality"] is not None
     assert response.payload["telemetry"]["schema_version"] == "1.0"
+
+
+def test_null_optional_metric_is_not_a_quality_issue():
+    from netcoop.agents.normalizer import normalize
+    import json
+    raw = json.loads(open('data/scenarios/congestion.json', encoding='utf-8').read())
+    result = normalize(raw)
+    assert not any('expected a number' in i for i in result.data_quality.issues)
+    assert result.data_quality.score > 0.8
