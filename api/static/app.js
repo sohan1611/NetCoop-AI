@@ -121,9 +121,14 @@ function renderHero() {
   $('trigger-run').classList.toggle('idle-highlight', !state.runId && !state.running);
   $('export-toggle').disabled = !r || state.running;
   $('hero-stats').classList.toggle('is-idle', !state.runId && !state.running);
+  const normalWarning = r?.status === 'diagnosed' && r.cause === 'normal' &&
+    (r.confidence < 0.75 || (r.limitations || []).some((item) => item.startsWith('warning-grade devices')));
   let health = '—', tone = '';
   if (inputRejected()) { health = 'Unknown — input rejected'; tone = 'muted'; }
-  else if (r?.status === 'diagnosed' && r.cause === 'normal') { health = 'Healthy'; tone = 'complete'; }
+  else if (r?.status === 'diagnosed' && r.cause === 'normal') {
+    health = normalWarning ? 'Normal with warnings' : 'Healthy';
+    tone = normalWarning ? 'flagged' : 'complete';
+  }
   else if (isFault(r) && r.confidence >= 0.75) {
     health = 'Critical'; tone = 'alert';
   } else if (isFault(r)) { health = 'Degraded'; tone = 'flagged'; }
@@ -150,8 +155,8 @@ function renderHero() {
   const medium = r?.confidence_category === 'medium';
   const low = ['low', 'insufficient'].includes(r?.confidence_category);
   const unclassified = r && !isFault(r) && r.cause !== 'normal';
-  severity.textContent = unclassified ? 'Unclassified' : high ? 'P1 CRIT' : medium ? 'P2' : low ? 'P3' : '—';
-  severity.className = 'pill ' + (high ? 'alert' : medium ? 'flagged' : '');
+  severity.textContent = normalWarning ? 'Watch' : unclassified ? 'Unclassified' : high ? 'P1 CRIT' : medium ? 'P2' : low ? 'P3' : '—';
+  severity.className = 'pill ' + (high ? 'alert' : normalWarning || medium ? 'flagged' : '');
 }
 // SSE is the live source; /details replaces these projections after the run ends.
 function liveAgent(name) {
@@ -953,8 +958,8 @@ function renderHypotheses() {
     heading.append(el('strong', label(a.cause)),
       el('span', percent(a.confidence) + (agentView ? ' Agent Score' : ' Heuristic Score'), 'mono'));
     const rationale = el('p', undefined, 'hypothesis-rationale');
-    rationale.append(el('strong', agentView ? 'Set Aside by Correlator: ' :
-      known ? ruledOut ? 'Ruled Out: ' : 'Partial Contributor: ' : '— '), el('span', humanText(a.rationale) || '—'));
+    rationale.append(el('strong', a.overruled_by ? 'Overruled by: ' : agentView ? 'Set Aside by Correlator: ' :
+      known ? ruledOut ? 'Ruled Out: ' : 'Partial Contributor: ' : '— '), el('span', humanText(a.overruled_by || a.rationale) || '—'));
     card.append(heading, confidenceBar(a.confidence), rationale); grid.append(card);
   });
   if (!alternatives.length) empty(grid, r ? 'No alternative explanations reported.' : '—');

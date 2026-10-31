@@ -207,7 +207,8 @@ def build_details(state: RunState, messages: list[dict[str, Any]]) -> dict[str, 
         "latency_series": _latency_series(telemetry, affected),
         "alternatives": [
             {"cause": a["cause"], "confidence": a["confidence"],
-             "rationale": _rationale(a["cause"], telemetry)}
+             "rationale": _rationale(a["cause"], telemetry),
+             **({"overruled_by": a["overruled_by"]} if a.get("overruled_by") else {})}
             for a in diagnosis.get("alternatives") or [] if isinstance(a, dict)],
         "primary_rationale": "; ".join(
             e["interpretation"] for e in evidence[:2] if isinstance(e, dict) and e.get("interpretation")

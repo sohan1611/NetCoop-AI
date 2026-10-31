@@ -51,7 +51,7 @@ def test_nc001_signature_requires_local_support(connected, tmp_path):
         assert any("evidence from unrelated devices/times" in item for item in report["limitations"])
 
 
-@pytest.mark.parametrize("minutes", [5, 6, 20, 24 * 60])
+@pytest.mark.parametrize("minutes", [2, 5, 6, 20, 24 * 60])
 def test_nc003_signature_requires_same_time_bucket(minutes, tmp_path):
     raw = fixture("11_signals_24h_apart.json")
     finding, report = run_report(raw, tmp_path / "original")
@@ -67,7 +67,7 @@ def test_nc003_signature_requires_same_time_bucket(minutes, tmp_path):
     context = _RunContext("time", "orchestrator", {}, telemetry, [], 2)
     result = _score(context)
     congestion = next(item for item in result.ordered if item.cause == "congestion")
-    if minutes <= 5:
+    if minutes <= 2:
         assert congestion.observations["link_utilization_pct"].grade == 1
         assert congestion.observations["latency_ms"].grade == 1
     else:

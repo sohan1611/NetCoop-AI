@@ -162,8 +162,6 @@ def test_api_errors_do_not_leak_exception_text(tmp_path):
         text = json.dumps(c.get(f'/api/runs/{run_id}/report').json())
         for leak in ('set_int_max_str_digits', 'Stack overflow', 'RecursionError', 'ValueError', 'Traceback'):
             assert leak not in text
-    run_id = c.post('/api/run', json={'upload_id': up}).json()['run_id']
-    c.get(f'/api/runs/{run_id}/report')
     detail = c.post(f'/api/runs/{run_id}/remediate').json()['detail']
     assert detail.startswith('cannot remediate') and 'Error' not in detail
 
@@ -288,7 +286,7 @@ def test_nc007_two_session_isolation_and_persisted_ownership(tmp_path):
         restarted.cookies.set('nc_session', cookie)
         assert restarted.get(f'/api/runs/{run_id}/report').status_code == 200
         assert run_id in {row['run_id'] for row in restarted.get('/api/runs').json()}
-        assert restarted.post('/api/run', json={'upload_id': upload_id}).status_code == 200
+        assert restarted.post('/api/run', json={'upload_id': upload_id}).status_code == 404
 
 
 def test_nc007_cookie_and_stream_redaction(tmp_path):

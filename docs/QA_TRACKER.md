@@ -59,7 +59,7 @@ Priority = ours after verification (audit priority in brackets when changed).
 | NC-028 | — [P3] | **Rejected** | evidence tiles set `data-searchable` (app.js:805) and `renderSearch` selects `[data-searchable]` (app.js:254). Re-check in browser in T27 | — | Rejected |
 | NC-029 | P3 | Confirmed | app.js:745 "CORRELATION HASH" shows run_id | T26 | Tested (T26: browser + tests) |
 | NC-030 | P3 | Confirmed | PIPELINE_AGENTS lists 5, reporter missing | T26 | Tested (T26: browser + tests) |
-| NC-031 | P3 | Confirmed | index.html:170 no synthetic-data notice | T26 | Tested (T26: browser + tests) |
+| NC-031 | P3 | Confirmed | index.html:170 no synthetic-data notice. S17: reopened (T26 text did not warn uploaders); upload notice added in T28 | T28 | Tested (T28) |
 | NC-032 | P3 | Confirmed | server.py `if scenario … elif upload_id` | T25 | Tested (T25: tests/test_api.py) |
 | NC-033 | P3 | Confirmed | `/api/runs` lists only dirs with report.json/state.json; fatal.txt-only dirs vanish | T25 | Tested (T25: tests/test_api.py) |
 
@@ -75,6 +75,23 @@ Priority = ours after verification (audit priority in brackets when changed).
 | NC-039 | P2 | matrix U26/U27: `?run=<unknown or expired>` looped "Stream interrupted / Waiting for report" forever and left `state.running` true, blocking Trigger and Run until reload | Tested (T27: browser) |
 | NC-040 | P3 | matrix S15: `evidence from unrelated devices/times` (about a capped congestion candidate) appeared in a report whose winner was latency_degradation, reading as a flaw of the diagnosis | Tested (T27: tests/test_qa_t27.py) |
 | NC-041 | P3 | matrix U31: `--dim` label colour #5b6880 on #131d2e = 3.0:1 (< WCAG AA 4.5:1) for 9–10 px labels; raised to #7d8aa3 (≈4.8:1) | Tested (T27: browser contrast probe) |
+| NC-042 | P1 | S17 verification: T23 counts out-of-window samples as invalid metrics; congestion.json + 4 h healthy history → insufficient_evidence 0.165 (plain 0.942). Real uploads with history lose the diagnosis | Tested (T28: tests/test_qa_t28.py; S17 rerun) |
+| NC-043 | P2 | S17: T25 `MAX_UPLOAD_FILES = 20` is global — 20 uploads/h from anyone → 413 for every visitor (judges) | Tested (T28: tests/test_qa_t28.py; S17 rerun) |
+| NC-044 | P3 | S17: "evidence from unrelated devices/times" shown for single-device fixtures 02/11 (real reason: util missing/low); normal's "warning-grade devices" limitation leaked into every report (congestion 0.94) | Tested (T28: tests/test_qa_t28.py; S17 rerun) |
+| NC-045 | P3 | S17: T28 deleted the upload before `admit()`; a 429 then lost the user's file | Tested (T29: tests/test_qa_t29.py; S17 browser: reused upload_id → 404 after run) |
+
+### Independent re-audit of bc123e9 (docs/qa/NetCoop_AI_Reaudit_Oct31.md, local only) — verified in S17 on a clean checkout
+
+| ID | Pri | Verdict + evidence (S17) | Status |
+|---|---|---|---|
+| RQA-01 | P1 | Confirmed. One device, 1 s spacing: 500/1k/2k/4k samples → 0.9/2.2/5.0/10.2 s. Cost is N × window (every distinct timestamp re-scores a ±300 s scope through `_observe_metric`), not the report's 2.5 G-op estimate | Tested (T29; S17: 4000 one-device samples 10.24 s → 0.27 s, linear; 5×3600 = 1.18 s) |
+| RQA-02 | P2 | Confirmed. fixture 13 (unparseable timestamp) → latency_degradation 0.912 | Tested (T29; S17: fixture 13 → insufficient_evidence 0.203) |
+| RQA-03 | P1 [P2] | Confirmed and raised: fixture 14 → 0.95; the same data without the 09:10 jitter row → 0.463. Bridging invents corroboration | Tested (T29; S17: fixture 14 → insufficient_evidence 0.299) |
+| RQA-04 | P2 | Confirmed. details.py:208-211 drops `overruled_by`; UI cards say "Partial Contributor" | Tested (T29; S17 browser: org_hardware_failure cards "Overruled by: critical device status …") |
+| RQA-05 | P2 | Confirmed. fixture 15 → normal 0.749 + "warning-grade devices", hero shows "Healthy" | Tested (T29; S17 browser: fixture 15 → "Normal with warnings" / Watch) |
+| RQA-06 | P3 | Confirmed. `admit` records the rate-limit hit before the concurrency check | Tested (T29: tests/test_qa_t29.py) |
+| RQA-07 | P3 | Valid: video link pending (T22); README "Share a run" now only reopens in the owner's browser; deploy SHA to verify after push | README wording Tested (T29); video link + deploy SHA → T22 |
+ongestion 0.94) | Tested (T28: tests/test_qa_t28.py; S17 rerun) |
 
 Totals: 30 confirmed, 2 partially confirmed (NC-008 remedy, NC-013 claim), 1 rejected (NC-028, re-checked in the browser in T27: evidence search works) from the external audit; plus 8 new defects (NC-034..NC-041) found and fixed in T27.
 
@@ -84,7 +101,7 @@ Totals: 30 confirmed, 2 partially confirmed (NC-008 remedy, NC-013 claim), 1 rej
 - **D2 Quarantine**: impossible values (pct outside 0–100, negative counts/latency, rssi > 0) become `None` in the analysed telemetry; each is recorded `{device_id, field, value, reason}` in a `quarantined` list surfaced in report limitations. Confidence is gated by valid-metric coverage.
 - **D3 Same-instant merge**: duplicate key = (device_id, UTC instant). Non-conflicting fields merge; conflicting fields → field set to `None` + `conflict` issue.
 - **D4 Alias conflict**: canonical + alias both present and converted values differ > 1 % → field `None` + `ambiguous` issue. Result independent of key order.
-- **D5 Locality**: a multi-metric signature (e.g. congestion = util + latency/loss/drops) is scored per device (plus its direct topology neighbours) within one time bucket (± 5 min). Best candidate location wins. If supporting metrics only come from unrelated devices/times, confidence is capped below the diagnosed gate with limitation "evidence from unrelated devices/times".
+- **D5 Locality**: a multi-metric signature (e.g. congestion = util + latency/loss/drops) is scored per device (plus its direct topology neighbours) in the same 5-minute bucket. Best candidate location wins. If supporting metrics only come from unrelated devices/times, confidence is capped below the diagnosed gate with limitation "evidence from unrelated devices/times".
 - **D6 Normal**: normal uses the worst device grade. Any warning-grade device caps normal confidence below 0.75 and names that device in limitations.
 - **D7 Alternatives**: higher-raw candidates overruled by a domain rule are listed with `overruled_by: <rule>`. Supersedes the T17 acceptance line.
 - **D8 Access**: server sets an HttpOnly, SameSite=Lax session cookie; each run/upload records its owner; list/stream/report/details/remediate return 404 for other sessions. Stream redacts raw input to a size note. CLI/MCP unaffected; `/?run=` deep link works in the owner's browser.

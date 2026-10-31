@@ -120,7 +120,7 @@ def test_malformed_json_returns_error_result_and_envelope():
     assert "invalid JSON" in responses[0].payload["message"]
 
 
-def test_duplicate_out_of_range_and_stale_samples_lower_score():
+def test_stale_samples_are_excluded_without_lowering_score():
     result = normalize(
         {
             "schema_version": "1.0",
@@ -151,13 +151,14 @@ def test_duplicate_out_of_range_and_stale_samples_lower_score():
     )
 
     assert result.error is None
-    assert result.data_quality.score < 1
-    issues = " ".join(result.data_quality.issues)
-    assert "duplicate sample" in issues
-    assert "out-of-range" in issues
-    assert "stale timestamp" in issues
+    assert result.data_quality.score == 1
+    assert result.data_quality.issues == [
+        "2 samples older than the analysis window (collected_at - 1 h) excluded"
+    ]
+    assert len(result.quarantined) == 2
+    assert all(item["reason"] == "stale timestamp" for item in result.quarantined)
     assert result.telemetry is not None
-    assert len(result.telemetry["samples"]) == 1  # D1/D3: future sample quarantined, duplicate merged
+    assert len(result.telemetry["samples"]) == 1
 
 
 def test_missing_optional_sections_use_empty_defaults():

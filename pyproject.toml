@@ -24,3 +24,4 @@ include = ["netcoop*", "api*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["performance: dense telemetry performance regression (runs by default)"]

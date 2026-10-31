@@ -355,25 +355,35 @@ def _instant(value: Any) -> float | None:
         return None
 
 
-def _local_scopes(telemetry: dict[str, Any], active: set[str]):
-    """Join direct neighbours within five minutes; index rows once per signature.
+def _local_scopes(
+    telemetry: dict[str, Any], active: set[str], signature: list[tuple[str, float]]
+):
+    """Join direct neighbours in the same 5-minute bucket.
 
-    Device/service rows are collection-time snapshots. Missing timestamps never
-    connect those snapshots to an arbitrary historical sample.
+    Tumbling and 150-second-offset families guarantee a shared scope for rows
+    at most 150 seconds apart, without joining rows over 300 seconds apart.
+    Index each location once per signature and score only supported buckets.
+    Device/service snapshots join the reference instant's buckets; samples
+    without timestamps join only other untimed rows.
     """
     sections = ("devices", "samples", "services")
-    indexed: dict[str, dict[str, list[tuple[float | None, dict]]]] = {}
+    indexed: dict[str, dict[str, list[tuple[float | None, dict, bool]]]] = {}
     reference = _instant(telemetry.get("collected_at"))
     if reference is None:
         reference = max((stamp for row in telemetry.get("samples", [])
                          if (stamp := _instant(row.get("timestamp"))) is not None), default=None)
     for section in sections:
+        metrics = [metric for metric, _ in signature
+                   if ("services" if _service_parts(metric) is not None else
+                       "devices" if metric in _DEVICE_METRICS else "samples") == section]
         for row in telemetry.get(section, []):
             device = row.get("server_id" if section == "services" else "device_id")
             if not isinstance(device, str):
                 continue
             stamp = _instant(row.get("timestamp")) if section == "samples" else reference
-            indexed.setdefault(device, {}).setdefault(section, []).append((stamp, row))
+            supported = any(grade > 0 for metric in metrics
+                            for grade, _ in _graded_rows({section: [row]}, metric, False))
+            indexed.setdefault(device, {}).setdefault(section, []).append((stamp, row, supported))
     topology = telemetry.get("topology", {})
     declared = {node.get("id") for node in topology.get("nodes", [])}
     neighbors: dict[str, set[str]] = {}
@@ -383,27 +393,26 @@ def _local_scopes(telemetry: dict[str, Any], active: set[str]):
             neighbors.setdefault(src, set()).add(dst)
             neighbors.setdefault(dst, set()).add(src)
     centers = active | {neighbor for device in active for neighbor in neighbors.get(device, ())}
-    seen: set[tuple[frozenset[str], float | None]] = set()
+    seen: set[frozenset[str]] = set()
     for center in sorted(centers):
         location = frozenset({center, *neighbors.get(center, ())})
-        rows = {
-            section: [item for device in sorted(location)
-                      for item in indexed.get(device, {}).get(section, [])]
-            for section in sections
-        }
-        moments = {stamp for items in rows.values() for stamp, _ in items}
-        for moment in sorted(moments, key=lambda stamp: (stamp is not None, stamp or 0)):
-            key = (location, moment)
-            if key in seen:
-                continue
-            seen.add(key)
-            yield {
-                **telemetry,
-                **{section: [row for stamp, row in items
-                             if (stamp == moment if stamp is None or moment is None
-                                 else abs(stamp - moment) <= 300)]
-                   for section, items in rows.items()},
-            }
+        if location in seen:
+            continue
+        seen.add(location)
+        buckets: dict[tuple[int, int] | None, dict[str, list[dict]]] = {}
+        supported_buckets = set()
+        for device in sorted(location):
+            for section, rows in indexed.get(device, {}).items():
+                for stamp, row, supported in rows:
+                    keys = (None,) if stamp is None else (
+                        (0, int(stamp // 300)), (1, int((stamp + 150) // 300)))
+                    for key in keys:
+                        buckets.setdefault(key, {name: [] for name in sections})[section].append(row)
+                        if supported:
+                            supported_buckets.add(key)
+        for key, rows in buckets.items():
+            if key in supported_buckets:
+                yield {**telemetry, **rows}
 
 
 def _hypothesis_scores(finding: dict[str, Any]) -> dict[str, float]:
@@ -558,7 +567,7 @@ def _candidate(
             if grade > 0 and device is not None
         }
         best = None
-        for scope in _local_scopes(telemetry, active):
+        for scope in _local_scopes(telemetry, active, signature):
             item = _candidate(cause, scope, findings, dq_factor, quality_issues, tops,
                               _device_down(scope), local=False)
             item.telemetry = scope
@@ -568,7 +577,11 @@ def _candidate(
             candidate = best
         global_support = sum(item.grade > 0 for item in observations.values())
         local_support = sum(item.grade > 0 for item in candidate.observations.values())
-        if global_support > 1 and (
+        global_signature = global_support >= 2 and (
+            cause != "congestion" or (observations.get("link_utilization_pct") is not None
+                                     and observations["link_utilization_pct"].grade > 0)
+        )
+        if global_signature and (
             local_support < 2 or (cause == "congestion"
                                  and _grade(candidate, "link_utilization_pct") <= 0)
         ):
@@ -673,10 +686,6 @@ def _score(context: _RunContext) -> _ScoreResult:
         )
         for cause in SIGNATURES
     ]
-    for candidate in candidates:
-        for limitation in candidate.limitations:
-            if limitation not in context.limitations:
-                context.limitations.append(limitation)
     winner, resolution = _select_winner(candidates, quality_issues, device_down)
     remaining = sorted(
         (candidate for candidate in candidates if candidate is not winner),
@@ -687,7 +696,6 @@ def _score(context: _RunContext) -> _ScoreResult:
     margin = winner.rank - runner.rank if runner is not None else winner.rank
     conflicts = list(dict.fromkeys([
         *_conflict_messages(tops, winner, runner),
-        *(limitation for candidate in candidates for limitation in candidate.limitations),
     ]))
     if resolution is not None:
         conflicts.append(f"Conflict resolved by domain rule: {resolution}")
@@ -1071,6 +1079,15 @@ class CorrelatorAgent(Agent):
                 alternative["overruled_by"] = result.resolution
             alternatives.append(alternative)
         _, _, quality_payload = _quality_details(context.findings)
+        visible_causes = {winner.cause, *(item["cause"] for item in alternatives)}
+        if len(result.ordered) > 1:
+            visible_causes.add(result.ordered[1].cause)
+        candidate_limitations = [
+            limitation for candidate in result.ordered
+            if candidate.cause in visible_causes
+            for limitation in candidate.limitations
+        ]
+        conflicts = list(dict.fromkeys([*conflicts, *candidate_limitations]))
         finding = Finding(
             agent=self.name,
             hypotheses=[
@@ -1089,6 +1106,7 @@ class CorrelatorAgent(Agent):
             ),
             notes=list(dict.fromkeys([
                 *context.limitations,
+                *candidate_limitations,
                 f"correlation rounds completed: {context.round}",
             ])),
         )

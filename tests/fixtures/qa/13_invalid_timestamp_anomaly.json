@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "QA-INVALID-TIMESTAMP",
+  "collected_at": "2026-10-31T09:10:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "AP-QA",
+      "status": "up",
+      "cpu_pct": 20,
+      "mem_pct": 25,
+      "queue_drops": 0,
+      "interface_errors": 0
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "AP-QA",
+      "timestamp": "2026-31-99T99:00:00Z",
+      "latency_ms": 500,
+      "jitter_ms": 90,
+      "packet_loss_pct": 6,
+      "link_utilization_pct": 30
+    }
+  ],
+  "services": []
+}

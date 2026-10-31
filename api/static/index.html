@@ -170,6 +170,7 @@
       <p class="muted">Bundled scenarios contain synthetic data.</p>
       <label class="modal-field" for="scenario">Scenario (expected diagnosis)<select id="scenario" required></select></label>
       <label class="modal-field" for="file">Or upload telemetry (JSON, max 5 MB)<input type="file" id="file" accept=".json,application/json"></label>
+      <p class="muted upload-notice">Upload synthetic or anonymised telemetry only. This is a public demo: uploads are private to your browser session and deleted after 1 hour.</p>
       <button id="clear-upload" type="button" class="button outline" hidden>Use selected scenario</button>
       <fieldset id="fail"><legend>Fault injection (one agent per run)</legend><div id="fail-options" class="fault-options"></div></fieldset>
       <label class="llm-toggle"><input type="checkbox" role="switch" disabled> LLM assist</label><p class="muted">server runs rules-only</p>

@@ -37,8 +37,9 @@ SECURITY_HEADERS = {
                                 "font-src https://fonts.gstatic.com; connect-src 'self'"),
 }
 MAX_UPLOAD_BYTES = 5_000_000
-MAX_UPLOAD_FILES = 20
-MAX_UPLOAD_TOTAL_BYTES = 25_000_000
+MAX_PENDING_UPLOADS = 5
+MAX_UPLOAD_FILES = 200
+MAX_UPLOAD_TOTAL_BYTES = 100_000_000
 MAX_CONCURRENT_RUNS = 2
 RATE_LIMIT = 10  # runs per client IP per RATE_WINDOW_S
 RATE_WINDOW_S = 60
@@ -127,14 +128,14 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
         while hits and now - hits[0] > RATE_WINDOW_S:
             hits.popleft()
         if len(hits) >= RATE_LIMIT:
-            raise HTTPException(429, f'too many {kind}; retry in a minute')
+            raise HTTPException(429, f'too many {kind}; retry in a minute', headers={'Retry-After': '60'})
         hits.append(now)
 
     def admit(request: Request) -> None:
-        """Per-IP rate limit, then global concurrency gate; raises 429. Caller must release()."""
-        rate_limit(request, hit_log, 'runs')
+        """Check concurrency before recording an admitted run's rate-limit hit."""
         if active[0] >= MAX_CONCURRENT_RUNS:
-            raise HTTPException(429, 'server busy; retry shortly')
+            raise HTTPException(429, 'server busy; retry shortly', headers={'Retry-After': '60'})
+        rate_limit(request, hit_log, 'runs')
         active[0] += 1
 
     def release() -> None:
@@ -207,6 +208,9 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
         folder = runs / 'uploads'
         folder.mkdir(parents=True, exist_ok=True)
         files = list(folder.glob('*.json'))
+        if sum(owned(path.with_suffix('.owner'), request.state.session)
+               for path in files) >= MAX_PENDING_UPLOADS:
+            raise HTTPException(413, 'too many pending uploads')
         if (len(files) >= MAX_UPLOAD_FILES
                 or sum(path.stat().st_size for path in files) + size > MAX_UPLOAD_TOTAL_BYTES):
             raise HTTPException(413, 'upload storage limit exceeded')
@@ -233,6 +237,9 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
         admit(request)
         try:
             create_run(run_id, request.state.session)
+            if req.upload_id is not None:
+                path.unlink()
+                path.with_suffix('.owner').unlink(missing_ok=True)
         except OSError:
             release()
             raise

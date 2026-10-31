@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "QA-TEN-MINUTE-BRIDGE",
+  "collected_at": "2026-10-31T09:10:00Z",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "SW-QA",
+      "status": "up",
+      "cpu_pct": 30,
+      "mem_pct": 30,
+      "queue_drops": 0,
+      "interface_errors": 0
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "SW-QA",
+      "timestamp": "2026-10-31T09:00:00Z",
+      "latency_ms": 500
+    },
+    {
+      "device_id": "SW-QA",
+      "timestamp": "2026-10-31T09:05:00Z",
+      "packet_loss_pct": 0
+    },
+    {
+      "device_id": "SW-QA",
+      "timestamp": "2026-10-31T09:10:00Z",
+      "jitter_ms": 90
+    }
+  ],
+  "services": []
+}

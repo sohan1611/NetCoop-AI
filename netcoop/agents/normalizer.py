@@ -198,6 +198,7 @@ class _QualityTracker:
     format_flags: set[str] = field(default_factory=set)
     quarantined: list[dict[str, Any]] = field(default_factory=list)
     valid_coverage: float = 1.0
+    no_window_samples: bool = False
 
     def map(self, device_id: Any, raw_path: str, raw_value: Any, metric: str,
             value: Any, *, raw_key: str = "", factor: float = 1.0) -> None:
@@ -271,7 +272,7 @@ class _QualityTracker:
         score *= self.valid_coverage
         # At most half the supplied metrics usable in any section is insufficient,
         # even when another section contains many healthy measurements.
-        if self.valid_coverage <= 0.5:
+        if self.valid_coverage <= 0.5 or self.no_window_samples:
             score = min(score, INSUFFICIENT_CONFIDENCE_THRESHOLD - 0.01)
         return DataQuality(score=round(score, 6), issues=self._summary())
 
@@ -447,6 +448,9 @@ def _normalize_row(raw: Any, section: str, tracker: _QualityTracker,
         if target is None:
             tracker.add("unknown", f"unknown field {path}.{key} dropped")
             continue
+        if target == "timestamp":
+            result[target] = value
+            continue
         converted = (
             _normalize_status(value, tracker, f"{path}.{key}")
             if target == "status"
@@ -496,13 +500,10 @@ def _split_metric_row(row: dict[str, Any], tracker: _QualityTracker, path: str,
     else:
         tracker.add("wrong_type", f"wrong type for {path}.device_id; expected a string")
 
-    timestamp = row.get("timestamp")
-    if isinstance(timestamp, str):
-        sample["timestamp"] = timestamp
-    elif timestamp is None:
-        tracker.add("no_timestamp", f"missing field {path}.timestamp")
+    if "timestamp" in row:
+        sample["timestamp"] = row["timestamp"]
     else:
-        tracker.add("wrong_type", f"wrong type for {path}.timestamp; expected a string")
+        tracker.add("no_timestamp", f"missing field {path}.timestamp")
 
     if "status" in row:
         status = _normalize_status(row["status"], tracker, f"{path}.status", organizer=organizer)
@@ -768,6 +769,48 @@ def _validate_rows(telemetry: dict[str, Any], tracker: _QualityTracker) -> None:
             "field": name, "value": value, "reason": reason,
         })
 
+    reference = (_parse_timestamp(telemetry.get("collected_at"))
+                 or _parse_timestamp(_latest_timestamp(telemetry["samples"])))
+    supplied_samples = bool(telemetry["samples"])
+    samples = []
+    stale_count = 0
+    invalid_count = 0
+    future_examples = []
+    for index, sample in enumerate(telemetry["samples"]):
+        timestamp = _parse_timestamp(sample.get("timestamp"))
+        if "timestamp" in sample and timestamp is None:
+            quarantine(sample, "timestamp", sample["timestamp"], "invalid timestamp")
+            invalid_count += 1
+            continue
+        reason = None
+        if timestamp is not None and reference is not None:
+            if timestamp < reference - timedelta(hours=1):
+                reason = "stale timestamp"
+            elif timestamp > reference + timedelta(minutes=5):
+                reason = "future timestamp"
+        if reason is None:
+            samples.append(sample)
+            continue
+        quarantine(sample, "timestamp", sample["timestamp"], reason)
+        if reason == "stale timestamp":
+            stale_count += 1
+        else:
+            future_examples.append(f"future timestamp at samples[{index}].timestamp: "
+                                   f"{sample['timestamp']}; device_id={sample.get('device_id')}; "
+                                   "quarantined sample excluded")
+    if invalid_count:
+        tracker.add("wrong_type", f"{invalid_count} samples with invalid timestamps excluded")
+    if stale_count:
+        tracker.add("coerced", f"{stale_count} samples older than the analysis window "
+                    "(collected_at - 1 h) excluded")
+    if future_examples:
+        tracker.add("stale", f"{len(future_examples)} future samples excluded; "
+                    f"first example: {future_examples[0]}")
+    telemetry["samples"] = samples
+    if supplied_samples and not samples:
+        tracker.no_window_samples = True
+        tracker.add("coerced", "no samples inside the analysis window")
+
     for section in ("devices", "samples", "services"):
         for index, row in enumerate(telemetry[section]):
             for name in sorted(NUMERIC_FIELDS & row.keys()):
@@ -803,8 +846,6 @@ def _validate_rows(telemetry: dict[str, Any], tracker: _QualityTracker) -> None:
     merged: list[dict[str, Any]] = []
     for index, sample in enumerate(telemetry["samples"]):
         timestamp = _parse_timestamp(sample.get("timestamp"))
-        if sample.get("timestamp") is not None and timestamp is None:
-            tracker.add("wrong_type", f"invalid timestamp at samples[{index}].timestamp")
         device_id = sample.get("device_id")
         if isinstance(device_id, str) and timestamp is not None:
             sample["timestamp"] = timestamp.isoformat().replace("+00:00", "Z")
@@ -826,28 +867,10 @@ def _validate_rows(telemetry: dict[str, Any], tracker: _QualityTracker) -> None:
             seen[key] = sample
         merged.append(sample)
 
-    reference = (_parse_timestamp(telemetry.get("collected_at"))
-                 or _parse_timestamp(_latest_timestamp(merged)))
-    samples = []
-    for index, sample in enumerate(merged):
-        timestamp = _parse_timestamp(sample.get("timestamp"))
-        reason = None
-        if timestamp is not None and reference is not None:
-            if timestamp < reference - timedelta(hours=1):
-                reason = "stale timestamp"
-            elif timestamp > reference + timedelta(minutes=5):
-                reason = "future timestamp"
-        if reason is not None:
-            quarantine(sample, "timestamp", sample["timestamp"], reason)
-            tracker.add("stale", f"{reason} at samples[{index}].timestamp: "
-                        f"{sample['timestamp']}; device_id={sample.get('device_id')}; "
-                        "quarantined sample excluded")
-        else:
-            samples.append(sample)
-    telemetry["samples"] = samples
+    telemetry["samples"] = merged
     telemetry["quarantined"] = tracker.quarantined
 
-    # Duplicated metrics count once; rejected time windows count as lost coverage.
+    # Duplicated metrics count once; only in-window metrics affect coverage.
     for section, rows in (("devices", telemetry["devices"]),
                           ("samples", merged), ("services", telemetry["services"])):
         total = sum(len(NUMERIC_FIELDS & row.keys()) for row in rows)

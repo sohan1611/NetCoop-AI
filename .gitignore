@@ -11,3 +11,6 @@ Plan.txt
 NetCoop_AI_*
 docs/qa/findings.json
 docs/qa/NetCoop_AI_Adversarial_QA_Report.md
+.agents/
+docs/qa/NetCoop_AI_Reaudit_Oct31.md
+NetCoop_Reaudit_*

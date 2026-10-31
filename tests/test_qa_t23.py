@@ -73,7 +73,10 @@ def test_nc003_collected_at_rejects_stale_and_future_samples(name, reason, tmp_p
     assert reason in result.quarantined[0]["reason"]
     _, report = run_report(raw, tmp_path)
     assert report["cause"] == "insufficient_evidence"
-    assert any(reason in issue and "quarantined" in issue for issue in report["limitations"])
+    if reason == "stale":
+        assert any("samples older than the analysis window" in issue for issue in report["limitations"])
+    else:
+        assert any(reason in issue and "quarantined" in issue for issue in report["limitations"])
 
 
 def test_nc003_time_window_boundaries_and_newest_sample_fallback():
