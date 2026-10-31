@@ -263,7 +263,7 @@ function setView(view) {
   $('sidebar-toggle').setAttribute('aria-expanded', 'false');
   if (view === 'topology') { drawTopology(); if (cy) { cy.resize(); cy.fit(); } }
   if (view === 'incidents') void refreshRuns();
-  if (view === 'playbooks' && !state.playbooks) void loadPlaybooks();
+  if (view === 'playbooks' && !state.playbooks) { $('playbooks-list').replaceChildren(); empty($('playbooks-list'), 'Loading playbooks…'); void loadPlaybooks(); }
   if (view === 'terminal') $('bus-input').focus();
 }
 function renderSearch() {
@@ -781,9 +781,10 @@ async function executeCommand(command) {
         reply(evidence?.length ? evidence.map((e) => display(e.device_id) + ': ' + metricText(e.metric, e.value, e.unit) + ' — ' + display(e.interpretation)).join('\n') : 'No supporting evidence available.'); break;
       }
       case 'alts': {
-        const alternatives = state.details?.alternatives;
-        reply(alternatives?.length ? alternatives.map((a) => label(a.cause) + ': ' + percent(a.confidence) + ' — ' + humanText(a.rationale || '—')).join('\n') :
-          state.report?.alternative_causes?.join('\n') || 'No alternative explanations reported.'); break;
+        const { alternatives, agentView } = alternativeList(state.report, state.details);
+        reply(alternatives.length ? alternatives.map((a) => label(a.cause) + ': ' +
+          (Number.isFinite(a.confidence) ? percent(a.confidence) + (agentView ? ' agent score' : '') : '—') +
+          ' — ' + humanText(a.overruled_by || a.rationale || '—')).join('\n') : 'No alternative explanations reported.'); break;
       }
       case 'remediate':
         if (!canRemediate()) { reply('Run a supported diagnosis before simulated remediation.'); break; }
@@ -933,17 +934,8 @@ function confidenceBar(value) {
   else { fill.style.width = '0%'; bar.setAttribute('aria-valuetext', 'Unavailable'); }
   bar.append(fill); return bar;
 }
-function renderHypotheses() {
-  const r = state.report, d = state.details, primary = $('primary-hypothesis'), grid = $('alts');
-  primary.replaceChildren(); grid.replaceChildren();
-  const rejected = inputRejected();
-  $('hypotheses-section').hidden = rejected;
-  $('hypotheses-empty').hidden = !rejected;
-  if (rejected) return;
-  const devices = r?.affected_devices?.join(', ');
-  primary.append(el('p', 'Primary Hypothesis: ' + label(r?.cause) + (devices ? ' on ' + devices : '') +
-    ' — ' + percent(r?.confidence) + ' (' + label(r?.confidence_category) + ' Confidence)', 'primary-title mono'),
-    confidenceBar(r?.confidence), el('p', humanText(d?.primary_rationale) || '—', 'hypothesis-rationale'));
+// Shared by the hypotheses panel and the `alts` console command.
+function alternativeList(r, d) {
   // /details exposes each analysis agent's top hypothesis and its actual score.
   const rejectedHypotheses = (d?.agents || [])
     .filter((a) => ['performance', 'infrastructure', 'connectivity'].includes(a.name) &&
@@ -955,12 +947,25 @@ function renderHypotheses() {
     d?.alternatives?.length ? d.alternatives : r.alternative_causes.map((cause) => ({ cause })) :
     d?.alternatives?.length ? [...d.alternatives].sort((a, b) => b.confidence - a.confidence)
       .slice(0, 2).map((a) => ({ ...a, rejected: true })) : rejectedHypotheses;
+  // Agent-level hypotheses the correlator did not pick are scores from one agent, not ruled-out causes.
+  return { alternatives, agentView: alternatives === rejectedHypotheses };
+}
+function renderHypotheses() {
+  const r = state.report, d = state.details, primary = $('primary-hypothesis'), grid = $('alts');
+  primary.replaceChildren(); grid.replaceChildren();
+  const rejected = inputRejected();
+  $('hypotheses-section').hidden = rejected;
+  $('hypotheses-empty').hidden = !rejected;
+  if (rejected) return;
+  const devices = r?.affected_devices?.join(', ');
+  primary.append(el('p', 'Primary Hypothesis: ' + label(r?.cause) + (devices ? ' on ' + devices : '') +
+    ' — ' + percent(r?.confidence) + ' (' + label(r?.confidence_category) + ' Confidence)', 'primary-title mono'),
+    confidenceBar(r?.confidence), el('p', humanText(d?.primary_rationale) || '—', 'hypothesis-rationale'));
+  const { alternatives, agentView } = alternativeList(r, d);
   alternatives.forEach((a) => {
     const known = Number.isFinite(a.confidence), ruledOut = a.rejected || known && a.confidence < 0.2;
     const card = el('article', undefined, 'alternative-card' + (known ? ruledOut ? ' ruled-out' : ' partial' : ''));
     const heading = el('div', undefined, 'alternative-heading');
-    // Agent-level hypotheses the correlator did not pick are scores from one agent, not ruled-out causes.
-    const agentView = alternatives === rejectedHypotheses;
     heading.append(el('strong', label(a.cause)),
       el('span', percent(a.confidence) + (agentView ? ' Agent Score' : ' Heuristic Score'), 'mono'));
     const rationale = el('p', undefined, 'hypothesis-rationale');

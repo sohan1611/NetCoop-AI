@@ -179,3 +179,5 @@ Vercel static = T29 (upload notice, "Normal with warnings", RUN ID). Render API 
 S18 live re-check (87c0674, Render redeployed in ~90 s): /api/health shows per-session/per-IP quotas + max_stored_runs; via Vercel R3-02 → latency_degradation 0.97, R3-03 → 0.95 with "historical:" note, R3-08 → insufficient_evidence 0.299 (identical to local); Vercel app.js has the Recovered state.
 
 S19 live re-check (e180e7a, live within ~60 s): via Vercel dns_failure → severity critical, affected [DNS_SRV_01], 0.931; FQA02 → latency_degradation, affected [AP-A]; Vercel app.js has "Diagnosis confidence".
+
+S20 live feature sweep (0f5dbb8): every UI feature exercised on the live site; three display defects found and fixed in T34 (percent rounding mismatch, `alts` console command vs panel, blank Playbooks view during first load).

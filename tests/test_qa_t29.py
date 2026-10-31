@@ -125,14 +125,18 @@ def test_rqa04_details_keep_overruled_alternatives(tmp_path):
         assert detail["overruled_by"] == alternative["overruled_by"]
 
 
-def render_js(function, setup, checks):
+def render_js(function, setup, checks, helpers=()):
     node = shutil.which("node")
     if node is None:
         pytest.skip("Node.js required for dashboard rendering regression")
     source = (server.STATIC / "app.js").read_text(encoding="utf-8")
-    start = source.index(f"function {function}(")
-    end = source.index("\n}", start) + 2
-    script = setup + "\n" + source[start:end] + f"\n{function}();\n" + checks
+
+    def body(name):
+        start = source.index(f"function {name}(")
+        return source[start:source.index("\n}", start) + 2]
+
+    script = (setup + "\n" + "".join(body(h) + "\n" for h in helpers) + body(function)
+              + f"\n{function}();\n" + checks)
     result = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stderr
 
@@ -181,7 +185,7 @@ const card = elements.alts.children[0];
 const rationale = card.children[2];
 assert.equal(rationale.children[0].text, 'Overruled by: ');
 assert.equal(rationale.children[1].text, 'a device reported down');
-""")
+""", helpers=("alternativeList",))
 
 
 def test_rqa06_nc045_rejected_runs_preserve_quota_and_upload(tmp_path, monkeypatch):

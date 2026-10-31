@@ -1,6 +1,7 @@
 """Presentation payload for the console UI, derived from a finished run (A2)."""
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +17,11 @@ MAX_SERIES = 200
 _DEVICE_METRICS = ("cpu_pct", "mem_pct", "interface_errors", "queue_drops")
 _SAMPLE_METRICS = ("latency_ms", "jitter_ms", "packet_loss_pct", "link_utilization_pct",
                    "rssi_dbm", "retransmission_pct")
+
+
+def _pct(value: float) -> str:
+    # Round half up like the console's Math.round, so a card never shows 93% beside (92%).
+    return f"{math.floor(value * 100 + 0.5)}%"
 
 
 def _parse(value: Any) -> datetime | None:
@@ -119,7 +125,7 @@ def _agent_view(name: str, state: RunState, diagnosis: dict[str, Any], failed: s
         telemetry = state.telemetry or {}
         base.update(status="complete" if quality is None or quality >= 0.5 else "flagged",
                     summary=f"Normalized {formats or 'input'} telemetry"
-                            + (f"; data quality {quality:.0%}" if quality is not None else ""),
+                            + (f"; data quality {_pct(quality)}" if quality is not None else ""),
                     stats={"Ingested": f"{len(telemetry.get('samples') or [])} samples",
                            "Mapped": f"{mapped} fields"})
         return base
@@ -131,7 +137,7 @@ def _agent_view(name: str, state: RunState, diagnosis: dict[str, Any], failed: s
                     and (confidence or 0) >= 0.75 else "flagged" if flagged else "complete"),
             top_hypothesis=cause, score=confidence,
             evidence_count=len(diagnosis.get("evidence") or []),
-            summary=f"Concluded {cause} at {(confidence or 0):.0%} after {state.rounds} query round{'' if state.rounds == 1 else 's'}",
+            summary=f"Concluded {cause} at {_pct(confidence or 0)} after {state.rounds} query round{'' if state.rounds == 1 else 's'}",
             stats={"Rounds": str(state.rounds), "Conflicts": str(len(diagnosis.get("conflicts") or []))})
         return base
     hypotheses = [h for h in finding.get("hypotheses") or [] if isinstance(h, dict)]
@@ -149,7 +155,7 @@ def _agent_view(name: str, state: RunState, diagnosis: dict[str, Any], failed: s
     flagged = top.get("cause") != "normal"
     base.update(status="alert" if flagged and critical else "flagged" if flagged else "complete",
                 top_hypothesis=top.get("cause"), score=top.get("score"),
-                summary=f"Top hypothesis {top.get('cause')} ({top.get('score', 0):.0%})"
+                summary=f"Top hypothesis {top.get('cause')} ({_pct(top.get('score', 0))})"
                         + (f". {notes[0]}" if notes else ""))
     return base
 
