@@ -508,6 +508,15 @@ def _select_winner(
         return congestion, (
             "utilization plus queue drops resolve the conflict as congestion"
         )
+    latency = by_cause["latency_degradation"]
+    if (
+        latency.match >= 0.55
+        and _grade(latency, "latency_ms") >= 0.5
+        and _grade(congestion, "link_utilization_pct") < 0.75
+        and all(latency.confidence >= item.confidence
+                for item in candidates if item is not latency and item.cause != "normal")
+    ):
+        return latency, "latency and jitter dominate while utilization is below critical"
     return max(candidates, key=lambda item: (item.rank, item.cause)), None
 
 
@@ -903,6 +912,12 @@ class CorrelatorAgent(Agent):
         )
         cause = "insufficient_evidence" if insufficient else winner.cause
         status = "insufficient_evidence" if insufficient else "diagnosed"
+        # Domain-rule / rank notes describe the winner; drop them when it is not reported.
+        conflicts = [
+            item for item in result.conflicts
+            if not (insufficient and item.startswith(
+                ("Conflict resolved by domain rule", "selected by")))
+        ]
         evidence, sources = self._supporting_evidence(context, winner)
         affected = self._affected_devices(context, winner)
         evidence = _enrich_evidence(evidence, context.telemetry, affected)
@@ -947,7 +962,7 @@ class CorrelatorAgent(Agent):
             "alternatives": alternatives,
             "evidence": evidence,
             "evidence_sources": sources,
-            "conflicts": result.conflicts,
+            "conflicts": conflicts,
             "coverage": round(winner.coverage, 6),
             "agreement": round(winner.agreement, 6),
             "match": round(winner.match, 6),

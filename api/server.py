@@ -29,7 +29,8 @@ SECURITY_HEADERS = {
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'no-referrer',
     'Content-Security-Policy': ("default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; "
-                                "style-src 'self' 'unsafe-inline'; connect-src 'self'"),
+                                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                                "font-src https://fonts.gstatic.com; connect-src 'self'"),
 }
 MAX_UPLOAD_BYTES = 5_000_000
 MAX_CONCURRENT_RUNS = 2

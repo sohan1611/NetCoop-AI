@@ -291,6 +291,15 @@ def analyze_connectivity(
                 topology_signals["hardware_failure"], severity
             )
 
+    # Packet loss only points at an interface when that device also reports
+    # interface errors (or is down); otherwise connectivity has no opinion on it.
+    interface_suspects: set[str] = set(down_devices)
+    if isinstance(devices, list):
+        for row in devices:
+            errors = _number(row.get("interface_errors")) if isinstance(row, dict) else None
+            if errors is not None and errors >= THRESHOLDS["interface_errors"]["warn"]:
+                interface_suspects.add(row.get("device_id"))
+
     samples = telemetry.get("samples") if isinstance(telemetry, dict) else None
     if isinstance(samples, list):
         for row in samples:
@@ -320,9 +329,10 @@ def analyze_connectivity(
                     if value >= crit
                     else 0.5 + 0.5 * (value - threshold) / (crit - threshold)
                 )
-                topology_signals[cause] = max(
-                    topology_signals[cause], _clamp(severity)
-                )
+                if cause != "interface_fault" or device_id in interface_suspects:
+                    topology_signals[cause] = max(
+                        topology_signals[cause], _clamp(severity)
+                    )
                 evidence.append(Evidence(
                     metric=metric,
                     value=round(value, 6),

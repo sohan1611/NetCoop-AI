@@ -68,3 +68,49 @@ def test_n3_evidence_carries_device_unit_threshold_baseline(tmp_path):
     assert util.device_id == "CORE_RTR_01" and util.unit == "%" and util.threshold == 75.0
     assert util.baseline is not None and util.baseline < util.value
     assert "CORE_RTR_01" in util.interpretation and "critical 90" in util.interpretation
+
+
+# N4 -------------------------------------------------------------------------
+def test_n4_vercel_json_sets_security_headers_with_font_csp():
+    config = json.loads((SCENARIOS.parents[1] / "vercel.json").read_text(encoding="utf-8"))
+    headers = {h["key"]: h["value"] for h in config["headers"][0]["headers"]}
+    assert headers["X-Frame-Options"] == "DENY" and headers["X-Content-Type-Options"] == "nosniff"
+    assert headers["Referrer-Policy"] == "no-referrer"
+    csp = headers["Content-Security-Policy"]
+    assert "https://fonts.googleapis.com" in csp and "font-src https://fonts.gstatic.com" in csp
+    from api.server import SECURITY_HEADERS
+    assert SECURITY_HEADERS["Content-Security-Policy"] == csp
+
+
+# N5 -------------------------------------------------------------------------
+def test_n5_no_domain_rule_claim_when_insufficient(tmp_path):
+    inputs = [(SCENARIOS / f"{name}.json").read_text(encoding="utf-8")
+              for name in ("conflicting_evidence", "insufficient_data")]
+    inputs.append(json.dumps([{"device_id": "X", "timestamp": "2026-10-31T09:00:00Z",
+                               "metrics": {"cpu_utilization_pct": 99.9}, "status": "Critical"}]))
+    seen_insufficient = 0
+    for raw in inputs:
+        _, report, _ = _run(tmp_path, raw)
+        if report.status == "insufficient_evidence":
+            seen_insufficient += 1
+            assert not any(i.startswith(("Conflict resolved by domain rule", "selected by"))
+                           for i in report.limitations)
+    assert seen_insufficient >= 2
+
+
+# N6 -------------------------------------------------------------------------
+def test_n6_connectivity_does_not_vote_interface_fault_on_congestion(tmp_path):
+    state, report, cause = _run(tmp_path, (SCENARIOS / "congestion.json").read_text(encoding="utf-8"))
+    hypotheses = state.findings["connectivity"]["hypotheses"]
+    top = max(hypotheses, key=lambda h: h["score"])["cause"]
+    assert cause == "congestion" and top != "interface_fault"
+    assert not any("connectivity=interface_fault" in i for i in report.limitations)
+
+
+# N7 -------------------------------------------------------------------------
+def test_n7_organizer_latency_spike_sweep(tmp_path):
+    hits = 0
+    for seed in range(60):
+        _, _, cause = _run(tmp_path, json.dumps(generate_telemetry("latency_spike", seed=seed)))
+        hits += cause == "latency_degradation"
+    assert hits >= 58
