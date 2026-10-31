@@ -89,6 +89,7 @@ All agent traffic uses schema version `1.0` and an `Envelope`. Canonical units a
 | `suspected_root_cause` | Selected cause, or `null` when none is supportable. | none |
 | `confidence` | Root-cause confidence from 0 to 1. | ratio |
 | `confidence_category` | `high`, `medium`, `low`, or `insufficient`. | none |
+| `severity` | Optional observed incident severity: `critical` or `warning`, independent of confidence. Defaults to `null` for normal, insufficient evidence, and error reports. Critical means an affected device has a signature metric at its critical threshold (inverted for RSSI/service success), an unambiguous down status, or a failed hosted service; otherwise a diagnosed fault is warning. UI contract: `report.severity`. | none |
 | `affected_devices` | Device IDs affected by the incident. | none |
 | `supporting_evidence` | Evidence summaries included in the final report. | none |
 | `supporting_evidence[].metric` | Canonical metric name. | none |

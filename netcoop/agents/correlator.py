@@ -237,6 +237,38 @@ def _device_down(telemetry: dict[str, Any]) -> bool:
     return any(values == {"down"} for values in statuses.values())
 
 
+def _device_telemetry(telemetry: dict[str, Any], device: str) -> dict[str, Any]:
+    return {
+        section: [row for row in telemetry.get(section, [])
+                  if row.get("server_id" if section == "services" else "device_id") == device]
+        for section in ("devices", "samples", "services")
+    }
+
+
+def _failed_hosted_service(telemetry: dict[str, Any]) -> bool:
+    return any(_status_grade(row.get("status")) == 1.0
+               for row in telemetry.get("services", []))
+
+
+def _incident_severity(
+    cause: str, telemetry: dict[str, Any], affected: list[str]
+) -> str | None:
+    """Observed incident severity is independent of diagnosis confidence."""
+    if cause not in SIGNATURES or cause == "normal":
+        return None
+    for device in affected:
+        own = _device_telemetry(telemetry, device)
+        if _device_down(own) or _failed_hosted_service(own):
+            return "critical"
+        if any(
+            grade >= 1.0 for metric, _ in SIGNATURES[cause]
+            if _limits(metric) is not None
+            for grade, _ in _graded_rows(own, metric, False)
+        ):
+            return "critical"
+    return "warning"
+
+
 def _graded_rows(
     telemetry: dict[str, Any], metric: str, critical_status: bool
 ) -> list[tuple[float, str | None]]:
@@ -370,7 +402,8 @@ def _local_scopes(
     linear time. Emit the top three windows per location, latest first on
     equal scores. Every pair <= 300 seconds has a candidate window; no scope
     spans more than 300 seconds. Device/service snapshots join only windows
-    containing the reference instant; untimed samples join only untimed rows.
+    containing the reference instant; each untimed sample joins only the
+    location's untimed snapshots, never another untimed sample.
     """
     sections = ("devices", "samples", "services")
     indexed: dict[str, list[tuple[float | None, str, dict, tuple[float, ...]]]] = {}
@@ -455,7 +488,12 @@ def _local_scopes(
                 rows[section].append(row)
             yield {**telemetry, **rows}
         if untimed_supported:
-            yield {**telemetry, **untimed}
+            # Untimed samples cannot establish co-occurrence with each other.
+            # Each may use the location's untimed device/service snapshots.
+            for row in untimed["samples"]:
+                yield {**telemetry, **untimed, "samples": [row]}
+            if not untimed["samples"]:
+                yield {**telemetry, **untimed}
 
 
 def _hypothesis_scores(finding: dict[str, Any]) -> dict[str, float]:
@@ -624,6 +662,28 @@ def _candidate(
                 best, best_key = item, key
         if best is not None:
             candidate = best
+            reference = _instant(telemetry.get("collected_at"))
+            if reference is None:
+                reference = max((stamp for row in telemetry.get("samples", [])
+                                 if (stamp := _instant(row.get("timestamp"))) is not None),
+                                default=None)
+            timed_scope = (
+                any(_instant(row.get("timestamp")) is not None
+                    for row in best.telemetry.get("samples", []))
+                or (reference is not None and any(best.telemetry.get(section)
+                                                 for section in ("devices", "services")))
+            )
+            if not timed_scope:
+                candidate.confidence = min(candidate.confidence, 0.749)
+                candidate.rank = _clamp(
+                    candidate.confidence * (1.0 - AGENT_SUPPORT_RANK_WEIGHT)
+                    + candidate.support * AGENT_SUPPORT_RANK_WEIGHT
+                )
+                metrics = ", ".join(sorted(candidate.observations))
+                candidate.limitations.append(
+                    "untimed: no timestamps or collected_at, so co-occurrence of "
+                    f"{metrics} is not established"
+                )
         global_support = sum(item.grade > 0 for item in observations.values())
         local_support = sum(item.grade > 0 for item in candidate.observations.values())
         global_signature = global_support >= 2 and (
@@ -1224,6 +1284,7 @@ class CorrelatorAgent(Agent):
             "cause": cause,
             "confidence": round(confidence, 6),
             "confidence_category": _confidence_category(confidence),
+            "severity": _incident_severity(cause, context.telemetry, affected),
             "affected_devices": affected,
             "alternatives": alternatives,
             "evidence": evidence,
@@ -1317,7 +1378,7 @@ class CorrelatorAgent(Agent):
         context: _RunContext, winner: _Candidate
     ) -> list[str]:
         """Devices with a non-zero grade on the winning signature's metrics (worst first),
-        plus the topology-derived common upstream device when connectivity found one."""
+        plus an independently abnormal common upstream device, when present."""
         if winner.cause == "normal":
             return []
         _, quality_issues, _ = _quality_details(context.findings)
@@ -1333,7 +1394,22 @@ class CorrelatorAgent(Agent):
             if (isinstance(item, dict) and item.get("metric") == "common_upstream"
                     and isinstance(item.get("device_id"), str)
                     and devices and item["device_id"] not in devices):
-                devices.append(item["device_id"])
+                upstream = item["device_id"]
+                own = _device_telemetry(context.telemetry, upstream)
+                metrics = [*THRESHOLDS, "status", *{
+                    metric for signature in SIGNATURES.values()
+                    for metric, _ in signature if _service_parts(metric) is not None
+                }]
+                if (_device_down(own) or _failed_hosted_service(own) or any(
+                    grade > 0 for metric in metrics
+                    for grade, _ in _graded_rows(own, metric, False)
+                )):
+                    devices.append(upstream)
+                else:
+                    winner.limitations.append(
+                        f"upstream context: {upstream} (no abnormal telemetry; "
+                        f"topological parent of {', '.join(devices)})"
+                    )
         return devices
 
     def _error(self, envelope: Envelope, message: str) -> Envelope:

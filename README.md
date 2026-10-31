@@ -81,7 +81,7 @@ Open http://127.0.0.1:8000 (or the live link above). Everything on the page come
 - **Console view:** hero status cards, five pipeline agents plus the Reporter (six roles) in the coordination pipeline with live status pills, the unified report (root cause, affected devices, evidence tiles with baselines, raw → normalized telemetry mapping, primary and alternative hypotheses, limitations, playbook actions), latency/loss/consensus cards, and the live agent message bus (SSE).
 - **Other views:** Topology (affected nodes red, upstream root amber; click a node for its metrics), Incidents (all runs; click one to reopen it), Agent Pipeline (messages per agent), Telemetry Stream (full bus + normalized samples), Device Mesh, Automated Playbooks, CLI Terminal (type `help`), Telemetry Feeds / System Settings (API limits).
 - **Simulated fix:** *Apply Simulated Remediation* patches a copy of the telemetry, re-diagnoses and shows before → after with `verified: true/false`. Nothing touches real infrastructure.
-- **Export:** JSON (`/api/runs/<id>/report`), Markdown (`/report.md`) or *Print / Save PDF*, which uses a light print stylesheet that lists every telemetry row and the limitations.
+- **Export:** JSON (`/api/runs/<id>/report`), Markdown (`/report.md`) or *Print / Save PDF*, which shows the report, evidence, limitations and normalized mapping table (up to 50 rows). Complete telemetry is in the JSON export.
 - **Reopen a run (works in the browser session that started it):** `/?run=<run_id>` opens a finished run directly.
 - Works down to 375 px wide (mobile tabs, no horizontal scroll).
 
@@ -92,7 +92,7 @@ Open http://127.0.0.1:8000 (or the live link above). Everything on the page come
 pytest -q
 python scripts/evaluate.py --no-llm
 ```
-`evaluate` runs every labelled scenario and prints expected vs. got, confidence and pass/fail. Success requires every label to pass; --min-pass-rate 0.75 explicitly enables a smoke threshold. Current results: **393 tests pass** with `pip install -e ".[dev,mcp]"` (with only `.[dev]` the MCP tests are skipped), **evaluate 16/16**. `python scripts/stress_test.py` and `python scripts/hostile_inputs.py` throw malformed, hostile and oversized inputs at the pipeline and report any crash (none today). The full 117-check QA matrix (`docs/qa/TEST_MATRIX.md`, defects in `docs/QA_TRACKER.md`) was executed and passes; `PYTHONPATH=. python scripts/run_local_qa.py` replays the adversarial fixtures.
+`evaluate` runs every labelled scenario and prints expected vs. got, confidence and pass/fail. Success requires every label to pass; --min-pass-rate 0.75 explicitly enables a smoke threshold. Current results: **456 tests pass** with `pip install -e ".[dev,mcp]"` (with only `.[dev]` the MCP tests are skipped), **evaluate 16/16**. `python scripts/stress_test.py` and `python scripts/hostile_inputs.py` throw malformed, hostile and oversized inputs at the pipeline and report any crash (none today). The full 117-check QA matrix (`docs/qa/TEST_MATRIX.md`, defects in `docs/QA_TRACKER.md`) was executed and passes; `PYTHONPATH=. python scripts/run_local_qa.py` replays the adversarial fixtures.
 
 ## Submission checklist (problem statement §7)
 | Deliverable | Where |

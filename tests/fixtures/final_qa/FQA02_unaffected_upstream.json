@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "FINAL-UPSTREAM",
+  "collected_at": "2026-10-31T10:00:00Z",
+  "topology": {
+    "nodes": [
+      {
+        "id": "CORE",
+        "role": "core",
+        "type": "router"
+      },
+      {
+        "id": "AP-A",
+        "type": "ap"
+      }
+    ],
+    "links": [
+      {
+        "src": "CORE",
+        "dst": "AP-A"
+      }
+    ]
+  },
+  "devices": [
+    {
+      "device_id": "CORE",
+      "status": "up",
+      "cpu_pct": 20,
+      "mem_pct": 20,
+      "queue_drops": 0,
+      "interface_errors": 0
+    },
+    {
+      "device_id": "AP-A",
+      "status": "up",
+      "cpu_pct": 20,
+      "mem_pct": 20,
+      "queue_drops": 0,
+      "interface_errors": 0
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "AP-A",
+      "timestamp": "2026-10-31T10:00:00Z",
+      "latency_ms": 310,
+      "jitter_ms": 68,
+      "link_utilization_pct": 20,
+      "packet_loss_pct": 0
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "FINAL-UNTIMED",
+  "topology": {
+    "nodes": [],
+    "links": []
+  },
+  "devices": [
+    {
+      "device_id": "A",
+      "status": "up",
+      "queue_drops": 300,
+      "cpu_pct": 10,
+      "mem_pct": 10
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "A",
+      "link_utilization_pct": 98,
+      "latency_ms": 10
+    },
+    {
+      "device_id": "A",
+      "link_utilization_pct": 20,
+      "latency_ms": 320
+    }
+  ],
+  "services": [],
+  "symptoms": []
+}

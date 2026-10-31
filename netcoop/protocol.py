@@ -100,3 +100,4 @@ class Report(BaseModel):
     limitations: list[str]
     run_id: str
     cause: str | None = None
+    severity: Literal["critical", "warning"] | None = None

@@ -208,15 +208,26 @@ def analyze_performance(
             abnormal = signal >= 0.5
             if abnormal or detailed:
                 comparisons: list[str] = []
+                evidence_value = latest
                 if threshold_score >= 0.5 and threshold is not None:
-                    direction = "below" if metric == "rssi_dbm" else "at or above"
-                    comparisons.append(f"latest/mean is {direction} the warning threshold {threshold:g}")
+                    inverted = metric == "rssi_dbm"
+                    direction = "at or below" if inverted else "at or above"
+                    latest_warns = latest <= threshold if inverted else latest >= threshold
+                    if latest_warns:
+                        comparisons.append(f"latest value is {direction} the warning threshold {threshold:g}")
+                    else:
+                        evidence_value = mean_value
+                        healthy_direction = "above" if inverted else "below"
+                        comparisons.append(
+                            f"window mean over {len(values)} samples is {direction} the warning threshold {threshold:g}; "
+                            f"latest {latest:g} at {timestamp} is {healthy_direction} it"
+                        )
                 if change_score >= 0.5 and baseline is not None:
                     comparisons.append(f"latest deteriorated from earlier-sample mean {baseline:.2f}")
                 interpretation = "; ".join(comparisons) or "metric is within configured and baseline limits"
                 evidence.append(Evidence(
                     metric=metric,
-                    value=round(latest, 6),
+                    value=round(evidence_value, 6),
                     unit=UNITS[metric],
                     threshold=threshold if threshold is not None else (round(baseline * 0.7, 6) if baseline is not None else None),
                     device_id=None if device_id == "<unknown>" else device_id,

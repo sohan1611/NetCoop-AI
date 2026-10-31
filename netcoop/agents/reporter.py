@@ -30,6 +30,8 @@ def _markdown(report: Report, narrative: str | None = None) -> str:
              '', '## Confidence', f'{report.confidence:.1%} ({report.confidence_category})',
              '', '## Affected devices', ', '.join(report.affected_devices) or 'None identified',
              '', '## Evidence', '| Metric | Value | Interpretation |', '| --- | --- | --- |']
+    if report.severity is not None:
+        lines.insert(2, f'Severity: {report.severity.title()}')
     lines.extend(f'| {_cell(e.metric)} | {_cell(e.value)} | {_cell(e.interpretation)} |'
                  for e in report.supporting_evidence)
     for heading, items in (('Evidence sources', report.evidence_sources),
@@ -74,6 +76,7 @@ class ReporterAgent(Agent):
                 incident_id=payload['telemetry']['incident_id'],
                 status=diagnosis['status'], suspected_root_cause=_CAUSES[cause],
                 confidence=diagnosis['confidence'],
+                severity=diagnosis.get('severity'),
                 confidence_category=diagnosis['confidence_category'],
                 affected_devices=diagnosis['affected_devices'],
                 supporting_evidence=diagnosis['evidence'],

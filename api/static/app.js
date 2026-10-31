@@ -74,7 +74,7 @@ function renderTopBar() {
   $('campus-subtitle').textContent = 'Campus Core Grid • ' + (state.report?.incident_id || 'idle');
 }
 function renderSidebar() {
-  const critical = state.runs?.filter((r) => isFault(r) && !r.recovered && r.confidence >= 0.75 &&
+  const critical = state.runs?.filter((r) => r.severity === 'critical' && !r.recovered &&
     !state.acknowledged.has(incidentKey(r)));
   $('critical-badge').hidden = !critical?.length;
   $('critical-badge').textContent = critical ? critical.length + '\nCRIT' : '—';
@@ -131,9 +131,9 @@ function renderHero() {
     health = normalWarning ? 'Normal with warnings' : 'Healthy';
     tone = normalWarning ? 'flagged' : 'complete';
   }
-  else if (isFault(r) && r.confidence >= 0.75) {
+  else if (isFault(r) && r.severity === 'critical') {
     health = 'Critical'; tone = 'alert';
-  } else if (isFault(r)) { health = 'Degraded'; tone = 'flagged'; }
+  } else if (isFault(r) && r.severity === 'warning') { health = 'Degraded'; tone = 'flagged'; }
   else if (r) { health = 'Unknown'; tone = 'muted'; }
   $('mesh-health').textContent = health === '—' ? health : 'Campus Mesh: ' + health;
   $('mesh-health').className = tone;
@@ -153,11 +153,10 @@ function renderHero() {
   $('active-incident').textContent = !inputRejected() && r?.incident_id ? 'Active Incident: ' + r.incident_id : '—';
   const severity = $('incident-severity');
   severity.hidden = !r || inputRejected();
-  const high = isFault(r) && r.confidence >= 0.75;
-  const medium = r?.confidence_category === 'medium';
-  const low = ['low', 'insufficient'].includes(r?.confidence_category);
-  const unclassified = r && !isFault(r) && r.cause !== 'normal';
-  severity.textContent = recovered ? 'Resolved' : normalWarning ? 'Watch' : unclassified ? 'Unclassified' : high ? 'P1 CRIT' : medium ? 'P2' : low ? 'P3' : '—';
+  const high = isFault(r) && r.severity === 'critical' && !recovered;
+  const medium = isFault(r) && r.severity === 'warning';
+  const unclassified = r && r.cause !== 'normal' && !high && !medium;
+  severity.textContent = recovered ? 'Resolved' : normalWarning ? 'Watch' : unclassified ? 'Unclassified' : high ? 'P1 CRIT' : medium ? 'P2' : '—';
   severity.className = 'pill ' + (recovered ? 'flagged' : high ? 'alert' : normalWarning || medium ? 'flagged' : '');
 }
 // SSE is the live source; /details replaces these projections after the run ends.
@@ -842,7 +841,11 @@ function renderRootCause() {
       clockLabel(w.first) + ' – ' + clockLabel(w.last);
     meta.append(el('span', 'Trigger Window: ' + windowText + ' UTC'));
   }
-  if (!inputRejected()) meta.append(el('span', 'Multi-Agent Consensus: ' + percent(r?.confidence) + ' ' + label(r?.confidence_category) + ' Confidence'));
+  if (!inputRejected()) {
+    meta.append(el('span', 'Diagnosis confidence: ' + percent(r?.confidence) + ' (' + label(r?.confidence_category) + ')'));
+    const agreement = votingConsensus();
+    if (agreement) meta.append(el('span', 'Agent agreement: ' + agreement.k + '/' + agreement.n));
+  }
   if (meta.children.length) box.append(meta);
   const limitations = r?.limitations || [];
   $('report-limitations').hidden = !limitations.length;
@@ -909,7 +912,8 @@ function renderTelemetry() {
 $('telemetry-more').onclick = () => {
   state.telemetryExpanded = !state.telemetryExpanded; renderTelemetry(); renderSearch();
 };
-// Printed report shows every telemetry row and the limitations; restore the screen state afterwards.
+// Print shows the report, evidence, limitations and normalized mapping table (up to 50 rows).
+// Complete telemetry is in the JSON export; restore the screen state afterwards.
 let printRestore = null;
 window.addEventListener('beforeprint', () => {
   printRestore = { rows: state.telemetryExpanded, limits: $('report-limitations').open };

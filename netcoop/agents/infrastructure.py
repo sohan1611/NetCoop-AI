@@ -134,14 +134,15 @@ def analyze_infrastructure(
                 affected.append(device_id)
 
         for metric in INFRASTRUCTURE_METRICS:
-            values = [
-                value for row in device_rows
+            observations = [
+                (value, row.get("timestamp")) for row in device_rows
                 if (value := _number(row.get(metric))) is not None
             ]
-            if not values:
+            if not observations:
                 continue
+            values = [item[0] for item in observations]
             seen_metrics.add(metric)
-            latest = values[-1]
+            latest, timestamp = observations[-1]
             mean_value = fmean(values)
             baseline = fmean(values[:-1]) if len(values) > 1 else None
             threshold_score = max(metric_severity(metric, latest), metric_severity(metric, mean_value))
@@ -151,18 +152,26 @@ def analyze_infrastructure(
             abnormal = signal >= 0.5
             if abnormal or detailed:
                 comparisons: list[str] = []
+                evidence_value = latest
                 threshold = THRESHOLDS[metric]["warn"]
                 if threshold_score >= 0.5:
-                    comparisons.append(f"latest/mean is at or above warning threshold {threshold:g}")
+                    if latest >= threshold:
+                        comparisons.append(f"latest value is at or above the warning threshold {threshold:g}")
+                    else:
+                        evidence_value = mean_value
+                        comparisons.append(
+                            f"window mean over {len(values)} samples is at or above the warning threshold {threshold:g}; "
+                            f"latest {latest:g} at {timestamp} is below it"
+                        )
                 if change_score >= 0.5 and baseline is not None:
                     comparisons.append(f"latest increased from earlier-record mean {baseline:.2f}")
                 evidence.append(Evidence(
                     metric=metric,
-                    value=round(latest, 6),
+                    value=round(evidence_value, 6),
                     unit=UNITS[metric],
                     threshold=threshold,
                     device_id=None if device_id == "<unknown>" else device_id,
-                    timestamp=latest_row.get("timestamp") if isinstance(latest_row.get("timestamp"), str) else None,
+                    timestamp=timestamp if isinstance(timestamp, str) else None,
                     interpretation="; ".join(comparisons) or "metric is within configured and baseline limits",
                 ))
                 if detailed and len(values) > 1:

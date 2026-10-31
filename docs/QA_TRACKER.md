@@ -155,6 +155,23 @@ Supplied pack: 8 fixtures `tests/fixtures/qa/R3-*.json` + `tests/test_r3_externa
 | R3-11 | P3 | Confirmed: README says 20 files / 25 MB (code: 200 / 100 MB, 5 pending per session) | Tested (T31 README limits) |
 | R3-12 | — | Demo video placeholder = T22 (not a code defect) | T22 |
 
+### Fourth independent audit of 4bb77b7 ("final 10-hour", PDF local only) — verified in S19 at HEAD 4bb77b7
+
+Supplied pack: 5 fixtures `tests/fixtures/final_qa/FQA*.json` + `tests/test_final_qa.py` (read before running; 6 of 6 fail at 4bb77b7). PDF and pack Markdown list the same FQA-01..10.
+
+| ID | Pri | Verdict + evidence (S19) | Status |
+|---|---|---|---|
+| FQA-01 | P1 | Confirmed: no timestamps/collected_at, util 98 (row 1) + latency 320 (row 2) + queue drops → congestion 0.789 | Tested (T32; S19: untimed rows never fused, cap 0.749 + "untimed:" note → congestion 0.631/0.749 by row order; same scope/evidence both orders — with no timestamps the agents use file order as time order, accepted) |
+| FQA-02 | P1 | Confirmed: healthy CORE (topological parent) listed in affected_devices with AP-A; baseline also lists CORE_RTR_01 for dns/dhcp/device_overload | Tested (T32; S19: FQA02 → [AP-A]; healthy parents dropped from dns/dhcp/device_overload/interface_fault/weak_wifi (checked: up, 0 errors, normal metrics) with "upstream context:" note; causes and 16/16 unchanged) |
+| FQA-03 | P1 | Confirmed: 30 rejected forged-cookie uploads after the IP cap → 32 rate-limit buckets (never evicted) | Tested (T33: IP checked first, session bucket only on admission, expired/empty buckets pruned; supplied test passes) |
+| FQA-04 | P2 | Confirmed: reversing duplicate up/down rows flips ConnectivityAgent's top hypothesis dns_failure ↔ hardware_failure | Tested (T33: conflicting device/service status → None on all rows; supplied test passes; R3-08 still insufficient_evidence) |
+| FQA-05 | P2 | Confirmed: "Multi-Agent Consensus: <confidence>" (NC-026 fixed the rail, not this line) | Tested (T33; S19 browser: "Diagnosis confidence: 93% (High)" + "Agent agreement: 1/3") |
+| FQA-06 | P2 | Confirmed: P1 CRIT / Critical / CRIT badge derive from confidence >= 0.75, not observed severity | Tested (T32 Report.severity + T33 UI; S19 browser: P1 CRIT/Critical/CRIT badge from severity == critical, not confidence) |
+| FQA-07 | P2 | Confirmed: evidence value 10 ms with "latest/mean is at or above the warning threshold 100" | Tested (T33: latest vs window-mean wording; supplied test passes) |
+| FQA-08 | P3 [P2/P3] | Confirmed: README:84 / app.js:912 claim print lists every telemetry row; it prints the mapping table (<= 50) | Tested (T33 README + comment: print = report, evidence, limitations, mapping table <= 50; full data in JSON) |
+| FQA-09 | — | Demo video = T22 | T22 |
+| FQA-10 | — | **Rejected**: CLAUDE.md forbids bot/app config in this repo; audit itself marks CI optional. Gate stays local (`pytest -q`, strict `evaluate`) | Rejected |
+
 ## Live deployment check (S17, 2026-10-31)
 
 Vercel static = T29 (upload notice, "Normal with warnings", RUN ID). Render API = T29: fixtures 14/13 via Vercel → insufficient_evidence 0.299 / 0.203 (identical to local). Two cookie jars through the Vercel rewrite: session B gets `[]` and 404 on report/stream/details/report.md of A's run; both sources → 422. Browser on netcoop-ai.vercel.app: congestion 0.942, SSE 12 messages through Vercel, hero Critical / P1 CRIT, no console errors. Found NC-046 (cookie not Secure).

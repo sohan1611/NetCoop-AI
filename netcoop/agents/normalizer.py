@@ -841,15 +841,22 @@ def _validate_rows(telemetry: dict[str, Any], tracker: _QualityTracker) -> None:
                                 f"{row.get('device_id', row.get('server_id'))}; quarantined")
                     row[name] = None
 
-    statuses: dict[str, str] = {}
-    for row in telemetry["devices"]:
-        device_id, status = row.get("device_id"), row.get("status")
-        if device_id is None or status is None:
-            continue
-        if device_id in statuses and statuses[device_id] != status:
-            tracker.add("conflict", f"conflicting status for duplicate device_id={device_id}: "
-                        f"{statuses[device_id]} vs {status}")
-        statuses.setdefault(device_id, status)
+    for section, identity in (("devices", ("device_id",)),
+                              ("services", ("server_id", "name"))):
+        statuses: dict[tuple, set[str]] = {}
+        for row in telemetry[section]:
+            key = tuple(row.get(field) for field in identity)
+            status = row.get("status")
+            if None not in key and status is not None:
+                statuses.setdefault(key, set()).add(status)
+        conflicts = {key for key, values in statuses.items() if len(values) > 1}
+        for key in sorted(conflicts):
+            description = ", ".join(f"{field}={value}" for field, value in zip(identity, key))
+            tracker.add("conflict", f"conflicting status for duplicate {description}: "
+                        + " vs ".join(sorted(statuses[key])))
+        for row in telemetry[section]:
+            if tuple(row.get(field) for field in identity) in conflicts:
+                row["status"] = None
 
     # Merge first so conflicts cannot be hidden by row ordering or later rows.
     seen: dict[tuple[str, datetime], dict[str, Any]] = {}

@@ -51,14 +51,14 @@ def test_nc035_domain_override_reaches_report(tmp_path):
     assert any("overruled by a device reported down" in item for item in report["alternative_causes"])
 
 
-def test_nc036_duplicate_device_status_is_reported_without_changing_rows(tmp_path):
+def test_nc036_duplicate_device_status_is_reported_and_neutralized(tmp_path):
     raw = json.loads((ROOT / "tests/fixtures/qa/00_control_normal.json").read_text(encoding="utf-8"))
     device = raw["devices"][0]
     device["status"] = "degraded"
     raw["devices"].append(dict(device, status="down"))
     normalized = normalize(raw)
     rows = [row for row in normalized.telemetry["devices"] if row["device_id"] == device["device_id"]]
-    assert [row["status"] for row in rows] == ["degraded", "down"]
+    assert [row["status"] for row in rows] == [None, None]
     issue = f"conflicting status for duplicate device_id={device['device_id']}: degraded vs down"
     _, report = run_report(raw, tmp_path)
     assert issue in report["limitations"]

@@ -130,21 +130,30 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
 
     def rate_limit(request: Request, history: dict[tuple[str, str], deque], kind: str) -> None:
         now = time.monotonic()
-        buckets = [
-            (('session', request.state.session), RATE_LIMIT),
-            (('ip', request.client.host if request.client else '?'), IP_RATE_LIMIT),
-        ]
-        pending = []
-        for key, limit in buckets:
-            hits = history.setdefault(key, deque())
-            while hits and now - hits[0] > RATE_WINDOW_S:
-                hits.popleft()
-            if len(hits) >= limit:
+        def live_bucket(key):
+            hits = history.get(key)
+            if hits is not None:
+                while hits and now - hits[0] > RATE_WINDOW_S:
+                    hits.popleft()
+                if not hits:
+                    history.pop(key, None)
+                    return None
+            return hits
+
+        if len(history) > 1000:
+            for key in list(history):
+                live_bucket(key)
+        def check(key, limit):
+            hits = live_bucket(key)
+            if hits is not None and len(hits) >= limit:
                 raise HTTPException(429, f'too many {kind}; retry in a minute',
                                     headers={'Retry-After': '60'})
-            pending.append(hits)
-        for hits in pending:
-            hits.append(now)
+            return key
+
+        pending = [check(('ip', request.client.host if request.client else '?'), IP_RATE_LIMIT)]
+        pending.append(check(('session', request.state.session), RATE_LIMIT))
+        for key in pending:
+            history.setdefault(key, deque()).append(now)
 
     def admit(request: Request) -> None:
         """Check concurrency before recording an admitted run's rate-limit hit."""
@@ -381,6 +390,7 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
                 rows.append({'run_id': entry.name, 'incident_id': data.get('incident_id'),
                              'cause': data.get('cause') or data.get('status'),
                              'status': data.get('status'), 'confidence': data.get('confidence'),
+                             'severity': data.get('severity'),
                              'recovered': any(item.startswith('historical: ')
                                               for item in data.get('limitations', [])),
                              'created_at': created})
@@ -390,7 +400,8 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
                 rows.append({'run_id': entry.name, 'incident_id': None,
                              'cause': None if running else 'error',
                              'status': 'running' if running else 'error',
-                             'confidence': None, 'recovered': False, 'created_at': created})
+                             'confidence': None, 'severity': None,
+                             'recovered': False, 'created_at': created})
         return rows
 
     @app.get('/api/playbook')

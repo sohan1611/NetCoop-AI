@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "FINAL-STATUS-CONFLICT",
+  "collected_at": "2026-10-31T10:00:00Z",
+  "topology": {
+    "nodes": [
+      {
+        "id": "CORE",
+        "role": "core",
+        "type": "router"
+      },
+      {
+        "id": "S",
+        "type": "server"
+      }
+    ],
+    "links": [
+      {
+        "src": "CORE",
+        "dst": "S"
+      }
+    ]
+  },
+  "devices": [
+    {
+      "device_id": "S",
+      "status": "up",
+      "cpu_pct": 20,
+      "mem_pct": 20
+    },
+    {
+      "device_id": "S",
+      "status": "down",
+      "cpu_pct": 20,
+      "mem_pct": 20
+    }
+  ],
+  "samples": [
+    {
+      "device_id": "S",
+      "timestamp": "2026-10-31T10:00:00Z",
+      "latency_ms": 10,
+      "packet_loss_pct": 0,
+      "jitter_ms": 1
+    }
+  ],
+  "services": [
+    {
+      "name": "dns",
+      "server_id": "S",
+      "status": "up",
+      "success_rate_pct": 100,
+      "response_ms": 10
+    }
+  ],
+  "symptoms": []
+}
