@@ -10,6 +10,51 @@ let cy = null, source = null;
 const NO_SAMPLES = [];
 let renderedSamples = null;
 const ACK_KEY = 'netcoop.acknowledged';
+// Presentation labels only; identifiers and API payloads retain their original values.
+const LABELS = {
+  normal: 'Normal', congestion: 'Congestion', weak_wifi: 'Weak Wi-Fi',
+  interface_fault: 'Interface fault', device_overload: 'Device overload',
+  dns_failure: 'DNS failure', dhcp_failure: 'DHCP failure', hardware_failure: 'Hardware failure',
+  latency_degradation: 'Latency degradation', insufficient_evidence: 'Insufficient evidence',
+  error: 'Input rejected', diagnosed: 'Diagnosed',
+  link_utilization_pct: 'Link Utilization', latency_ms: 'Round-Trip Latency',
+  queue_drops: 'Queue Drops', packet_loss_pct: 'Packet Loss Rate', jitter_ms: 'Jitter',
+  cpu_pct: 'CPU', mem_pct: 'Memory', interface_errors: 'Interface Errors',
+  rssi_dbm: 'Wi-Fi RSSI', retransmission_pct: 'Retransmissions',
+  dns_status: 'DNS Status', dns_success_rate_pct: 'DNS Success Rate', dns_response_ms: 'DNS Response Time',
+  dhcp_status: 'DHCP Status', dhcp_success_rate_pct: 'DHCP Success Rate', dhcp_response_ms: 'DHCP Response Time',
+  high: 'High', medium: 'Medium', low: 'Low', insufficient: 'Insufficient',
+  ap: 'Wi-Fi AP', router: 'Router', switch: 'Switch', server: 'Server', host: 'Host',
+};
+const AGENT_NAMES = {
+  normalizer: 'NormalizerAgent', performance: 'PerformanceAgent', infrastructure: 'InfrastructureAgent',
+  connectivity: 'ConnectivityAgent', correlator: 'CorrelatorAgent', reporter: 'ReporterAgent',
+  orchestrator: 'Orchestrator', You: 'You', Orchestrator: 'Orchestrator',
+};
+function label(value) {
+  if (value == null || value === '') return '—';
+  return Object.hasOwn(LABELS, value) ? LABELS[value] : humanText(value).replaceAll('_', ' ');
+}
+function counted(value, singular, plural = singular + (singular === singular.toUpperCase() ? 'S' : 's')) {
+  return Number.isFinite(value) ? value + ' ' + (value === 1 ? singular : plural) : '—';
+}
+function humanText(value) {
+  // API prose can embed enum names and backend-generated counts. Do not alter device IDs or paths.
+  return String(value ?? '').replace(/\b[a-z]+(?:_[a-z]+)+\b/g, (word) =>
+    Object.hasOwn(LABELS, word) ? LABELS[word] : word)
+    .replace(/\b(Top hypothesis:?|Concluded) (normal|congestion)\b/g, (_, prefix, cause) => prefix + ' ' + LABELS[cause])
+    .replace(/\b(\d+) (devices?|samples?|fields?|formats?|records?|findings?|agents?|seconds?|rounds?|nodes?|links?|issues?|sources?)\b(?:\(s\))?/gi,
+      (_, n, noun) => counted(Number(n), noun.replace(/s$/i, '')))
+    .replace(/\b1 node are\b/g, '1 node is');
+}
+function agentName(name) { return AGENT_NAMES[name] || label(name); }
+function roleLabel(device) {
+  if (!device) return '—';
+  const role = device.role ? label(device.role) : '';
+  const type = device.type ? label(device.type) : '';
+  return (role && type && !role.toLowerCase().includes(type.toLowerCase()) ? role + ' ' + type : role || type || '—').toUpperCase();
+}
+function unitSuffix(unit) { return unit && unit !== 'count' ? ' ' + unit : ''; }
 
 function readAcknowledged() {
   try {
@@ -84,12 +129,12 @@ function renderHero() {
   const count = state.messages.length ? PIPELINE_AGENTS.filter(([name]) => produced.has(name)).length :
     agents ? agents.filter((a) => a.status !== 'failed' &&
       (a.name !== 'correlator' || a.top_hypothesis != null)).length : null;
-  $('swarm-status').textContent = count === null ? '—' : `Swarm Status: ${count} Active Diagnostic Agents`;
+  $('swarm-status').textContent = count === null ? '—' : `Swarm Status: ${counted(count, 'Active Diagnostic Agent')}`;
   $('swarm-status').className = count === null ? '' : 'complete';
   $('swarm-status-dot').className = 'health-dot' + (count === null ? '' : ' complete');
   const since = relativeTime(d?.finished_at);
   $('coordination-cycle').textContent = since === '—' ? '—' : 'Last Coordinated Sweep: ' + since;
-  $('query-rounds').textContent = Number.isFinite(d?.rounds) ? d.rounds + ' query rounds' : '—';
+  $('query-rounds').textContent = counted(d?.rounds, 'query round');
   $('active-incident').textContent = !inputRejected() && r?.incident_id ? 'Active Incident: ' + r.incident_id : '—';
   const severity = $('incident-severity');
   severity.hidden = !r || inputRejected();
@@ -118,13 +163,13 @@ function liveAgent(name) {
       view.status = Number.isFinite(p.data_quality?.score) && p.data_quality.score < 0.5 ? 'flagged' : 'complete';
       view.summary = p.formats?.length ? 'Normalized ' + p.formats.join(', ') + ' telemetry' : '';
       if (Number.isFinite(p.data_quality?.score)) view.summary += '; data quality ' + Math.round(p.data_quality.score * 100) + '%';
-      view.stats = { Ingested: Array.isArray(p.telemetry?.samples) ? p.telemetry.samples.length + ' samples' : '—',
-        Mapped: Array.isArray(p.mappings) ? p.mappings.length + ' fields' : '—' };
+      view.stats = { Ingested: Array.isArray(p.telemetry?.samples) ? counted(p.telemetry.samples.length, 'sample') : '—',
+        Mapped: Array.isArray(p.mappings) ? counted(p.mappings.length, 'field') : '—' };
     } else if (name === 'correlator') {
       const diagnosis = p.diagnosis || {};
       view.status = diagnosis.cause && diagnosis.cause !== 'normal' ?
         diagnosis.status === 'diagnosed' && diagnosis.confidence >= 0.75 ? 'alert' : 'flagged' : 'complete';
-      view.summary = diagnosis.cause ? 'Top hypothesis: ' + diagnosis.cause : '';
+      view.summary = diagnosis.cause ? 'Top hypothesis: ' + label(diagnosis.cause) : '';
       view.stats = { Confidence: Number.isFinite(diagnosis.confidence) ? Math.round(diagnosis.confidence * 100) + '%' : '—',
         Conflicts: Array.isArray(diagnosis.conflicts) ? diagnosis.conflicts.length : '—' };
     } else {
@@ -132,10 +177,10 @@ function liveAgent(name) {
       // Critical classifications without an explicit SSE severity arrive via /details.
       const critical = p.evidence?.some((e) => e.severity === 'critical' || /(?:>=|<=) critical\b/.test(e.interpretation || ''));
       view.status = !top ? 'abstained' : top.cause === 'normal' ? 'complete' : critical ? 'alert' : 'flagged';
-      view.summary = [top?.cause ? 'Top hypothesis: ' + top.cause +
+      view.summary = [top?.cause ? 'Top hypothesis: ' + label(top.cause) +
         (Number.isFinite(top.score) ? ' (' + Math.round(top.score * 100) + '%)' : '') : '', ...(p.notes || []).slice(0, 1)].filter(Boolean).join('. ');
       view.stats = { Evidence: Array.isArray(p.evidence) ? p.evidence.length : '—',
-        Flagged: Array.isArray(p.affected_devices) ? p.affected_devices.length + ' devices' : '—' };
+        Flagged: Array.isArray(p.affected_devices) ? counted(p.affected_devices.length, 'device') : '—' };
     }
     view.findingStatus = view.status;
   }
@@ -144,7 +189,7 @@ function liveAgent(name) {
 function renderPipeline() {
   const agreement = votingConsensus();
   $('pipeline-consensus').textContent = inputRejected() ? 'HALTED (input rejected)' : agreement ?
-    `${agreement.label} (${agreement.k}/${agreement.n} AGENTS ENGAGED)` : '—';
+    `${agreement.label} (${agreement.k}/${counted(agreement.n, 'AGENT')} ENGAGED)` : '—';
   $('pipeline-consensus').className = agreement ? agreement.label.toLowerCase() : '';
   const grid = $('pipeline-agents');
   grid.classList.toggle('is-idle', !state.runId && !state.running);
@@ -160,13 +205,13 @@ function renderPipeline() {
     header.append(el('span', '// AGENT-' + String(i + 1).padStart(2, '0') + ':', 'mono agent-index'),
       el('span', status[0].toUpperCase() + status.slice(1), 'pill ' + status));
     const title = el('h3', name[0].toUpperCase() + name.slice(1) + ' Agent');
-    const summary = el('p', agent.summary || '—', 'agent-summary');
-    summary.title = agent.summary || '';
+    const summary = el('p', humanText(agent.summary) || '—', 'agent-summary');
+    summary.title = humanText(agent.summary);
     const footer = el('div', undefined, 'agent-stats mono');
     const stats = Object.entries(agent.stats || {}).slice(0, 2);
     for (let j = 0; j < 2; j++) {
       const stat = el('span');
-      if (stats[j]) stat.append(el('span', stats[j][0] + ': ', 'muted'), el('strong', stats[j][1] ?? '—'));
+      if (stats[j]) stat.append(el('span', stats[j][0] + ': ', 'muted'), el('strong', humanText(stats[j][1] ?? '—')));
       else stat.textContent = '—';
       footer.append(stat);
     }
@@ -259,7 +304,7 @@ async function init() {
   const selected = $('scenario').value || 'congestion';
   $('scenario').replaceChildren();
   list.forEach((s) => {
-    const o = el('option', s.name + '  (' + s.expected + ')'); o.value = s.name; $('scenario').append(o);
+    const o = el('option', label(s.name) + '  (' + label(s.expected) + ')'); o.value = s.name; $('scenario').append(o);
   });
   $('scenario').value = list.some((s) => s.name === selected) ? selected : list[0]?.name || '';
   state.scenariosReady = list.length > 0; renderHero(); renderStates();
@@ -316,19 +361,35 @@ function subscribeRun() {
 
 function summarize(msg) {
   const p = msg.payload || {};
-  if (p.message) return p.message;
-  if (p.action) return [p.action, p.reason].filter(Boolean).join(': ');
-  if (p.query_type || p.type) return p.query_type || p.type;
-  if (p.diagnosis && p.diagnosis.cause) return 'diagnosis: ' + p.diagnosis.cause;
+  if (msg.type === 'TASK') {
+    if (['performance', 'infrastructure', 'connectivity'].includes(msg.recipient)) {
+      return 'analyze ' + (Array.isArray(p.telemetry?.devices) ? counted(p.telemetry.devices.length, 'device') : '— devices') +
+        ' / ' + (Array.isArray(p.telemetry?.samples) ? counted(p.telemetry.samples.length, 'sample') : '— samples');
+    }
+    if (msg.recipient === 'correlator') {
+      const count = Array.isArray(p.findings) ? p.findings.length :
+        p.findings && typeof p.findings === 'object' ? Object.keys(p.findings).length : null;
+      return 'correlate ' + counted(count, 'finding') + ' (round ' + display(p.round) + ')';
+    }
+    if (msg.recipient === 'reporter') return 'assemble unified report';
+  }
+  if (msg.type === 'FINDING' && msg.sender === 'normalizer') {
+    return 'normalized ' + (p.formats?.length ? p.formats.join(', ') : '—') +
+      ', data quality ' + percent(p.data_quality?.score);
+  }
+  if (p.message) return humanText(p.message);
+  if (p.action) return [label(p.action), humanText(p.reason)].filter(Boolean).join(': ');
+  if (p.query_type || p.type) return label(p.query_type || p.type);
+  if (p.diagnosis && p.diagnosis.cause) return 'diagnosis: ' + label(p.diagnosis.cause);
   if (p.report) return 'report ready';
   if (p.hypotheses && p.hypotheses.length) {
     const top = [...p.hypotheses].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
-    return ['top hypothesis: ' + (top.cause || top.name || '—'), ...(p.notes || []).slice(0, 1)].join('; ');
+    return humanText(['top hypothesis: ' + label(top.cause || top.name), ...(p.notes || []).slice(0, 1)].join('; '));
   }
-  if (p.notes?.length) return p.notes.join('; ');
-  if (p.data_quality) return 'data quality ' + p.data_quality.score;
+  if (p.notes?.length) return humanText(p.notes.join('; '));
+  if (p.data_quality) return 'data quality ' + percent(p.data_quality.score);
   if (p.raw !== undefined) return 'raw telemetry submitted';
-  return Object.keys(p).slice(0, 4).join(', ');
+  return 'No summary available.';
 }
 function addMessage(msg) {
   state.messages.push(msg);
@@ -406,8 +467,8 @@ function renderTable(target, columns, rows, onSelect) {
 function renderIncidents() {
   renderTable('incidents-table', [
     ['Time (UTC)', (r) => r.created_at], ['Incident', (r) => r.incident_id || r.run_id],
-    ['Cause', (r) => r.cause], ['Confidence', (r) => percent(r.confidence)],
-    ['Status', (r) => r.status], ['Acknowledged', (r) => state.acknowledged.has(incidentKey(r)) ? 'Yes' : 'No'],
+    ['Cause', (r) => label(r.cause)], ['Confidence', (r) => percent(r.confidence)],
+    ['Status', (r) => label(r.status)], ['Acknowledged', (r) => state.acknowledged.has(incidentKey(r)) ? 'Yes' : 'No'],
   ], state.runs || [], selectRun);
 }
 function selectRun(row) {
@@ -418,10 +479,10 @@ function selectRun(row) {
 function renderAgentMessages() {
   const host = $('agent-messages'); host.replaceChildren();
   PIPELINE_AGENTS.forEach(([name]) => {
-    const section = el('section', undefined, 'agent-message-group'); section.append(el('h3', name));
+    const section = el('section', undefined, 'agent-message-group'); section.append(el('h3', agentName(name)));
     const list = el('ol', undefined, 'agent-message-list mono');
     runMessages().filter((m) => m.sender === name || m.recipient === name).forEach((m) => {
-      const row = el('li', clockLabel(m.timestamp, true) + ' [' + display(m.sender) + ' → ' + display(m.recipient) + '] ' + summarize(m));
+      const row = el('li', clockLabel(m.timestamp, true) + ' [' + agentName(m.sender) + ' → ' + agentName(m.recipient) + '] ' + summarize(m));
       row.dataset.searchable = ''; list.append(row);
     });
     if (!list.children.length) empty(section, 'No messages for this agent.');
@@ -435,27 +496,28 @@ function renderSamples() {
   if (rows === renderedSamples) return;
   renderedSamples = rows;
   const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
-  renderTable('samples-table', keys.map((key) => [key, (r) => r[key]]), rows);
+  renderTable('samples-table', keys.map((key) => [label(key), (r) => r[key]]), rows);
 }
 function renderDevices() {
   renderTable('devices-table', [
-    ['Device', (d) => d.device_id], ['Type', (d) => d.type], ['Role', (d) => d.role],
+    ['Device', (d) => d.device_id], ['Type', (d) => label(d.type)], ['Role', (d) => roleLabel(d)],
     ['Location', (d) => d.location], ['Status', (d) => d.status],
-    ['Worst metric', (d) => d.worst_metric], ['Value', (d) => metricText(d.worst_metric, d.worst_value, d.unit)],
+    ['Worst metric', (d) => label(d.worst_metric)], ['Value', (d) => metricText(d.worst_metric, d.worst_value, d.unit)],
     ['Severity', (d) => d.severity],
   ], state.details?.devices || []);
 }
 function renderTopologyDevice(id) {
   const host = $('topology-device'); host.replaceChildren(); host.append(el('h3', id));
   const device = state.details?.devices?.find((d) => d.device_id === id);
-  if (device) host.append(el('p', Object.entries(device).filter(([key]) => key !== 'device_id')
-    .map(([key, value]) => key + ': ' + display(value)).join(' · ')));
+  if (device) host.append(el('p', Object.entries(device).filter(([key, value]) => key !== 'device_id' && !(key === 'unit' && value === 'count'))
+    .map(([key, value]) => label(key) + ': ' + (key === 'role' ? roleLabel(device) :
+      ['type', 'worst_metric'].includes(key) ? label(value) : display(value))).join(' · ')));
   const evidence = (state.report?.supporting_evidence || []).filter((e) => e.device_id === id);
-  evidence.forEach((e) => host.append(el('p', metricText(e.metric, e.value, e.unit) + ' — ' + display(e.interpretation), 'mono')));
+  evidence.forEach((e) => host.append(el('p', metricText(e.metric, e.value, e.unit) + ' — ' + humanText(e.interpretation || '—'), 'mono')));
   const samples = (findingPayload('normalizer').telemetry?.samples || []).filter((s) => s.device_id === id);
   const latest = samples.slice().sort((a, b) => (Date.parse(a.timestamp) || 0) - (Date.parse(b.timestamp) || 0)).at(-1);
   if (latest) host.append(el('p', Object.entries(latest).filter(([key]) => key !== 'device_id')
-    .map(([key, value]) => key + ': ' + display(value)).join(' · '), 'mono'));
+    .map(([key, value]) => label(key) + ': ' + display(value)).join(' · '), 'mono'));
   if (!device && !latest && !evidence.length) empty(host, 'No device metrics available.');
 }
 function renderPlaybooks() {
@@ -463,7 +525,7 @@ function renderPlaybooks() {
   if (!state.playbooks?.length) { empty(host, state.playbooksError || 'No playbooks loaded.'); return; }
   state.playbooks.forEach((p) => {
     const card = el('article', undefined, 'playbook-entry'); card.dataset.searchable = '';
-    card.append(el('h3', p.cause));
+    card.append(el('h3', label(p.cause)));
     const list = el('ol'); (p.actions || []).forEach((a) => list.append(el('li', a)));
     card.append(list, el('p', p.remediation, 'muted')); host.append(card);
   });
@@ -476,7 +538,7 @@ function renderInfo() {
     const fields = [['API base', location.origin + '/api'], ['Version', state.health?.version],
       ['Uptime (seconds)', state.health?.uptime_s], ['LLM enabled', state.health?.llm_enabled],
       ...Object.entries(state.health?.limits || {})];
-    fields.forEach(([key, value]) => list.append(el('dt', key), el('dd', display(value), 'mono')));
+    fields.forEach(([key, value]) => list.append(el('dt', label(key)), el('dd', display(value), 'mono')));
     if (!state.health) host.append(el('p', 'Health information unavailable.', 'muted'));
     host.append(list);
   });
@@ -500,7 +562,7 @@ const REMEDIABLE_CAUSES = new Set(['congestion', 'weak_wifi', 'interface_fault',
 const display = (value) => value === null || value === undefined || value === '' ? '—' : String(value);
 const percent = (value) => Number.isFinite(value) ? Math.round(value * 100) + '%' : '—';
 function metricText(metric, value, unit) {
-  return display(metric) + ' = ' + display(value) + (unit ? ' ' + unit : '');
+  return label(metric) + ' = ' + display(value) + unitSuffix(unit);
 }
 function evidenceTone(e) {
   const device = state.details?.devices?.find((d) => d.device_id === e.device_id && d.worst_metric === e.metric);
@@ -516,6 +578,14 @@ function findingPayload(name) {
 function clockLabel(stamp, milliseconds = false) {
   const time = Date.parse(stamp);
   return Number.isFinite(time) ? new Date(time).toISOString().slice(11, milliseconds ? 23 : 19) : '—';
+}
+function sampleWindow() {
+  if (state.details?.window) return state.details.window;
+  const stamps = (findingPayload('normalizer').telemetry?.samples || [])
+    .map((sample) => Date.parse(sample.timestamp)).filter(Number.isFinite);
+  if (!stamps.length) return { first: null, last: null, seconds: 0 };
+  const first = Math.min(...stamps), last = Math.max(...stamps);
+  return { first: new Date(first).toISOString(), last: new Date(last).toISOString(), seconds: Math.floor((last - first) / 1000) };
 }
 function svgElement(tag, attrs) {
   const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -573,7 +643,7 @@ function renderRailStats() {
   $('packet-loss-device').textContent = display(worst?.device_id);
   $('rail-confidence').textContent = inputRejected() ? '—' : percent(state.report?.confidence ?? findingPayload('correlator').diagnosis?.confidence);
   const consensus = votingConsensus();
-  $('rail-accord').textContent = consensus ? consensus.k + '/' + consensus.n + ' Agents in Accord' : '—';
+  $('rail-accord').textContent = consensus ? consensus.k + '/' + counted(consensus.n, 'Agent') + ' in Accord' : '—';
 }
 function renderRightRail() { renderLatency(); renderRailStats(); }
 const BUS_TYPES = new Set(['TASK', 'FINDING', 'QUERY', 'RESPONSE', 'ERROR']);
@@ -593,7 +663,7 @@ function renderBus() {
     const time = el('time', clockLabel(msg.timestamp, true));
     if (Number.isFinite(Date.parse(msg.timestamp))) time.dateTime = msg.timestamp;
     time.title = display(msg.timestamp) + ' (UTC)';
-    heading.append(el('span', '[' + display(msg.sender) + ' → ' + display(msg.recipient) + ']'), time);
+    heading.append(el('span', '[' + agentName(msg.sender) + ' → ' + agentName(msg.recipient) + ']'), time);
     row.append(heading, el('p', '“' + (summarize(msg) || '—') + '”')); list.append(row);
   });
   const changed = messages.length !== renderedBusMessages.length || shared !== messages.length;
@@ -639,7 +709,7 @@ async function executeCommand(command) {
       }
       case 'alts': {
         const alternatives = state.details?.alternatives;
-        reply(alternatives?.length ? alternatives.map((a) => display(a.cause) + ': ' + percent(a.confidence) + ' — ' + display(a.rationale)).join('\n') :
+        reply(alternatives?.length ? alternatives.map((a) => label(a.cause) + ': ' + percent(a.confidence) + ' — ' + humanText(a.rationale || '—')).join('\n') :
           state.report?.alternative_causes?.join('\n') || 'No alternative explanations reported.'); break;
       }
       case 'remediate':
@@ -680,23 +750,28 @@ function renderReport() {
   renderSearch();
 }
 function renderRootCause() {
-  const r = state.report, w = state.details?.window, box = $('summary');
+  const r = state.report, w = sampleWindow(), box = $('summary');
   box.replaceChildren();
   const exceptional = r && ['insufficient_evidence', 'error'].includes(r.status);
   box.className = 'root-cause' + (exceptional ? r.status === 'error' ? ' error' : ' insufficient' : '');
-  const label = el('p', r?.status === 'error' ? 'INPUT REJECTED' : exceptional ? 'INSUFFICIENT EVIDENCE' : 'SYNTHESIZED PROBABLE ROOT CAUSE', 'mono callout-label');
-  if (!exceptional) label.append(el('strong', r?.cause ? ' / ' + r.cause.replaceAll('_', ' ') : ''));
+  const calloutLabel = el('p', r?.status === 'error' ? 'INPUT REJECTED' : exceptional ? 'INSUFFICIENT EVIDENCE' : 'SYNTHESIZED PROBABLE ROOT CAUSE', 'mono callout-label');
+  if (!exceptional) calloutLabel.append(el('strong', r?.cause ? ' / ' + label(r.cause) : ''));
   const cause = r?.status === 'error' ? r.limitations?.join('; ') : r?.suspected_root_cause;
-  box.append(label, el('p', cause ? '“' + cause + '”' : '—', 'root-cause-text'));
+  box.append(calloutLabel, el('p', cause ? '“' + humanText(cause) + '”' : '—', 'root-cause-text'));
   if (r?.status === 'insufficient_evidence' && r.limitations?.length) {
-    box.append(el('p', 'Limitations: ' + r.limitations.slice(0, 3).join('; '), 'muted report-limitations'));
+    box.append(el('p', 'Limitations: ' + humanText(r.limitations.slice(0, 3).join('; ')), 'muted report-limitations'));
   }
-  if (!exceptional) box.append(el('p', r?.affected_devices?.length ? 'Affected devices: ' + r.affected_devices.join(', ') : '—', 'affected-sentence'));
+  if (!exceptional) box.append(el('p', r?.affected_devices?.length ?
+    (r.affected_devices.length === 1 ? 'Affected device: ' : 'Affected devices: ') + r.affected_devices.join(', ') : '—', 'affected-sentence'));
   const meta = el('div', undefined, 'callout-meta');
-  if (w?.first && w?.last && !inputRejected()) meta.append(el('span', 'Trigger Window: ' + w.first + ' – ' + w.last));
-  if (!inputRejected()) meta.append(el('span', 'Multi-Agent Consensus: ' + percent(r?.confidence) + ' ' + display(r?.confidence_category) + ' Confidence'));
+  if (Number.isFinite(Date.parse(w.first)) && Number.isFinite(Date.parse(w.last)) && !inputRejected()) {
+    const windowText = Date.parse(w.first) === Date.parse(w.last) ? 'single sample @ ' + clockLabel(w.first) :
+      clockLabel(w.first) + ' – ' + clockLabel(w.last);
+    meta.append(el('span', 'Trigger Window: ' + windowText + ' UTC'));
+  }
+  if (!inputRejected()) meta.append(el('span', 'Multi-Agent Consensus: ' + percent(r?.confidence) + ' ' + label(r?.confidence_category) + ' Confidence'));
   if (meta.children.length) box.append(meta);
-  if (!exceptional && r?.limitations?.length) box.append(el('p', 'Limitations: ' + r.limitations.join('; '), 'muted report-limitations'));
+  if (!exceptional && r?.limitations?.length) box.append(el('p', 'Limitations: ' + humanText(r.limitations.join('; ')), 'muted report-limitations'));
 }
 function renderAffectedDevices() {
   const grid = $('affected-devices'), ids = state.report?.affected_devices || [];
@@ -704,8 +779,8 @@ function renderAffectedDevices() {
   ids.slice(0, 3).forEach((id) => {
     const d = state.details?.devices?.find((device) => device.device_id === id);
     const card = el('article', undefined, 'device-card');
-    card.append(el('span', display(d?.role || d?.type), 'mono stat-label'), el('strong', id),
-      el('p', [d?.location, d?.type].filter(Boolean).join(' · ') || '—', 'device-description'));
+    card.append(el('span', roleLabel(d), 'mono stat-label'), el('strong', id),
+      el('p', [d?.location, d?.type ? label(d.type) : null].filter(Boolean).join(' · ') || '—', 'device-description'));
     card.append(el('span', d?.worst_metric ? metricText(d.worst_metric, d.worst_value, d.unit) : '—',
       'pill ' + (d?.severity === 'critical' ? 'alert' : d?.severity === 'warning' ? 'flagged' : '')));
     grid.append(card);
@@ -716,18 +791,18 @@ function renderAffectedDevices() {
 function renderEvidence() {
   const grid = $('evidence'), rows = state.report?.supporting_evidence || [];
   grid.replaceChildren();
-  const seconds = state.details?.window?.seconds;
+  const window = sampleWindow(), seconds = window.seconds;
   $('sample-window').textContent = Number.isFinite(seconds) && seconds > 0 ?
-    'SAMPLED OVER ' + seconds + ' SECONDS' : seconds === 0 ? 'SINGLE SAMPLE' : '—';
+    'SAMPLED OVER ' + counted(seconds, 'SECOND') : window.first ? 'SINGLE SAMPLE' : 'NO SAMPLES';
   rows.slice(0, 5).forEach((e) => {
     const tile = el('article', undefined, 'evidence-tile');
     tile.dataset.searchable = '';
-    tile.append(el('span', display(e.metric).replaceAll('_', ' '), 'mono stat-label'),
-      el('strong', display(e.value) + (e.unit ? ' ' + e.unit : ''), 'metric-value ' + evidenceTone(e)),
-      el('span', e.baseline != null ? 'Baseline: ' + e.baseline + (e.unit ? ' ' + e.unit : '') :
-        e.threshold != null ? 'Threshold: ' + e.threshold + (e.unit ? ' ' + e.unit : '') : '—', 'mono evidence-detail'),
+    tile.append(el('span', label(e.metric), 'mono stat-label'),
+      el('strong', display(e.value) + unitSuffix(e.unit), 'metric-value ' + evidenceTone(e)),
+      el('span', e.baseline != null ? 'Baseline: ' + e.baseline + unitSuffix(e.unit) :
+        e.threshold != null ? 'Threshold: ' + e.threshold + unitSuffix(e.unit) : '—', 'mono evidence-detail'),
       el('span', display(e.device_id), 'mono evidence-detail'));
-    tile.title = e.interpretation || ''; grid.append(tile);
+    tile.title = humanText(e.interpretation); grid.append(tile);
   });
   if (!rows.length) empty(grid, state.report ? 'No supporting evidence available.' : '—');
 }
@@ -761,17 +836,17 @@ function renderHypotheses() {
   $('hypotheses-section').hidden = rejected;
   $('hypotheses-empty').hidden = !rejected;
   if (rejected) return;
-  primary.append(el('p', 'Primary Hypothesis: ' + display(r?.cause) + ' on ' + (r?.affected_devices?.join(', ') || '—') +
-    ' — ' + percent(r?.confidence) + ' (' + display(r?.confidence_category) + ')', 'primary-title mono'),
-    confidenceBar(r?.confidence), el('p', d?.primary_rationale || '—', 'hypothesis-rationale'));
+  primary.append(el('p', 'Primary Hypothesis: ' + label(r?.cause) + ' on ' + (r?.affected_devices?.join(', ') || '—') +
+    ' — ' + percent(r?.confidence) + ' (' + label(r?.confidence_category) + ' Confidence)', 'primary-title mono'),
+    confidenceBar(r?.confidence), el('p', humanText(d?.primary_rationale) || '—', 'hypothesis-rationale'));
   const alternatives = d?.alternatives?.length ? d.alternatives : (r?.alternative_causes || []).map((cause) => ({ cause }));
   alternatives.forEach((a) => {
     const known = Number.isFinite(a.confidence), ruledOut = known && a.confidence < 0.2;
     const card = el('article', undefined, 'alternative-card' + (known ? ruledOut ? ' ruled-out' : ' partial' : ''));
     const heading = el('div', undefined, 'alternative-heading');
-    heading.append(el('strong', display(a.cause)), el('span', percent(a.confidence) + ' Probability', 'mono'));
+    heading.append(el('strong', label(a.cause)), el('span', percent(a.confidence) + ' Probability', 'mono'));
     const rationale = el('p', undefined, 'hypothesis-rationale');
-    rationale.append(el('strong', known ? ruledOut ? 'Ruled Out: ' : 'Partial Contributor: ' : '— '), el('span', a.rationale || '—'));
+    rationale.append(el('strong', known ? ruledOut ? 'Ruled Out: ' : 'Partial Contributor: ' : '— '), el('span', humanText(a.rationale) || '—'));
     card.append(heading, confidenceBar(a.confidence), rationale); grid.append(card);
   });
   if (!alternatives.length) empty(grid, r ? 'No alternative explanations reported.' : '—');
@@ -796,12 +871,12 @@ function renderActions() {
   if (!list.children.length) empty(list, state.report ? 'No corrective actions reported.' : '—');
   const result = state.remediation;
   $('fixresult').textContent = result ? result.error ? 'Simulated remediation error: ' + result.error :
-    'Simulated remediation: ' + display(result.before) + ' → ' + display(result.after) + ' — verified ' + (result.verified ? '✓' : '✗') : '';
+    'Simulated remediation: ' + label(result.before) + ' → ' + label(result.after) + ' — verified ' + (result.verified ? '✓' : '✗') : '';
   $('fixresult').className = result ? 'remediation-result ' + (result.verified ? 'pass' : 'fail') : '';
 }
 window.openRemediateModal = () => {
   if (!canRemediate()) { $('status').textContent = 'Run a supported diagnosis to approve simulated remediation.'; renderStates(); return; }
-  $('remediate-target').textContent = 'Run: ' + state.runId + ' · Cause: ' + display(state.report.cause);
+  $('remediate-target').textContent = 'Run: ' + state.runId + ' · Cause: ' + label(state.report.cause);
   $('remediate-modal').dataset.runId = state.runId;
   if (!$('remediate-modal').open) $('remediate-modal').showModal();
   $('remediate-cancel').focus();
