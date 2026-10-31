@@ -21,7 +21,7 @@ Every task: add/extend pytest tests in tests/ for what it builds; `pytest -q` mu
 | T14 | DONE | low | README.md: problem, architecture diagram (mermaid), agents, protocol, confidence method, error handling, setup, run, tests, scenarios, limitations, third-party acknowledgements | fresh clone setup works |
 | T15 | DONE | — (Claude C5) | `docs/DEMO_SCRIPT.md`: 3–5 min video script — dashboard run of congestion → live agent messages → QUERY loop → report; interop/malformed input handled; `--fail-agent` degrade; simulated fix + verify; `evaluate.py` table | script fits ≤5 min |
 | T16 | DONE | medium | Fix review bugs B1–B8 below (S4 review). Owner: Sonnet until Codex quota resets | `pytest -q` passes, `evaluate` 16/16, `python scripts/stress_test.py` shows no CRASH and B2–B7 cases diagnosed correctly |
-| T17 | TODO | medium | Fix security V1–V8 and bugs B9–B14 below (S6 review). Owner: Sonnet (Codex if quota back) | `pytest -q` passes, `evaluate` 16/16, `scripts/stress_test.py` + `scripts/hostile_inputs.py` no CRASH, 20k-device input < 5 s and = normal, no report lists an alternative with confidence ≥ the chosen cause |
+| T17 | DONE | medium | Fix security V1–V8 and bugs B9–B14 below (S6 review). Owner: Sonnet (Codex if quota back) | `pytest -q` passes, `evaluate` 16/16, `scripts/stress_test.py` + `scripts/hostile_inputs.py` no CRASH, 20k-device input < 5 s and = normal, no report lists an alternative with confidence ≥ the chosen cause |
 
 ## Canonical telemetry (input after normalization)
 ```json
@@ -83,3 +83,5 @@ After T17: update README robustness/security section, rerun both scripts, commit
 - S5 (Sonnet): T16 DONE, B1-B8 fixed with regression tests (141 tests, evaluate 16/16, stress test no CRASH), pushed per group.
   Decisions: B2 = weights rebalanced + multi-domain rule; B5 = "normal" matched on present metrics once coverage >= 0.4.
 - S6 (Opus security/bug hunt): T16 verified (141 tests, 16/16, no crashes). Found V1–V8 + B9–B14 → T17. Vercel SSE proxy unverified (need Vercel URL).
+- S7 (Sonnet): T17 DONE, V1–V8 + B9–B13 fixed with regression tests (182 tests, 16/16, no CRASH); B14 skipped (optional; relevance-weighted agreement already lifted weak_wifi/schema_v0 jitter to 10/10 and 9/10).
+  Decisions: caps 25k devices/50k samples (2k would reject the 20k probe); sparse 2-metric 20k probe stays insufficient_evidence, new `20k_full` case = normal in ~2 s; org_hardware_failure still shows infra-vs-performance disagreement.

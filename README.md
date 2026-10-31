@@ -85,6 +85,7 @@ In `data/scenarios/` (regenerate with `python scripts/gen_scenarios.py`): normal
 - **Cleanup:** run and upload folders (and finished task records) older than `NETCOOP_RUN_TTL_S` seconds (default 3600) are deleted on each new run.
 - **Errors:** API responses use generic wording ("JSON nesting too deep", "number too large", "invalid JSON telemetry"); exception detail goes to server logs only.
 - **Headers:** `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and a CSP are set on every response; the cytoscape CDN script is pinned with an SRI hash.
+- **Diagnosis robustness:** alternatives are always strictly below the chosen confidence (a domain-rule override says so and lists the higher raw scores); `normal` is ineligible while any device is `down` or any metric is critical, and a down device is diagnosed as `hardware_failure` (or `interface_fault` when interface errors dominate) even without topology; the connectivity agent abstains when no topology or services are supplied; `NaN`/`Infinity`/`1e999` values are dropped as invalid. Checked by `scripts/stress_test.py` and `scripts/hostile_inputs.py` (no crashes; 20,000 healthy devices with a full metric set diagnose as `normal` in about 2 s).
 - **Single worker:** run state is held in process memory, so deploy with exactly one uvicorn worker (`uvicorn api.server:app --host 0.0.0.0 --port $PORT`, no `--workers`).
 
 ## Limitations
