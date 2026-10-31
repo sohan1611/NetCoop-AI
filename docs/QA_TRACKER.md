@@ -30,10 +30,10 @@ Priority = ours after verification (audit priority in brackets when changed).
 | ID | Pri | Verdict | Evidence (S13) | Task | Status |
 |---|---|---|---|---|---|
 | NC-001 | P0 | Confirmed | fixture 01 → congestion 1.0 from AP-A util + HOST-C latency; correlator maxes each metric fleet-wide | T24 | Confirmed |
-| NC-002 | P0 | Confirmed | fixture 02 → congestion 0.9; `_validate_rows` flags but keeps values | T23 | Confirmed |
-| NC-003 | P0 [P1] | Confirmed | fixtures 03/07/11 → congestion 0.83–1.0; cutoff = batch max − 1 h, stale rows kept, no future check | T23 (window) + T24 (time join) | Confirmed |
-| NC-004 | P1 | Confirmed | fixture 04 → 1 sample; dedupe key drops 2nd row (normalizer.py:735-753) | T23 | Confirmed |
-| NC-005 | P1 | Confirmed | fixture 05 results differ by key order | T23 | Confirmed |
+| NC-002 | P0 | Confirmed | fixture 02 → congestion 0.9; `_validate_rows` flags but keeps values | T23 | Tested (T23: `test_nc002_impossible_values_are_itemized_and_excluded`, `test_nc002_each_impossible_metric_becomes_none`) |
+| NC-003 | P0 [P1] | Confirmed | fixtures 03/07/11 → congestion 0.83–1.0; cutoff = batch max − 1 h, stale rows kept, no future check | T23 (window) + T24 (time join) | T23 window tested (`test_nc003_collected_at_rejects_stale_and_future_samples`, `test_nc003_time_window_boundaries_and_newest_sample_fallback`); T24 time join pending |
+| NC-004 | P1 | Confirmed | fixture 04 → 1 sample; dedupe key drops 2nd row (normalizer.py:735-753) | T23 | Tested (T23: `test_nc004_same_instant_merges_complementary_fields_and_nulls_conflicts`) |
+| NC-005 | P1 | Confirmed | fixture 05 results differ by key order | T23 | Tested (T23: `test_nc005_alias_conflicts_are_order_independent`, `test_nc005_converted_aliases_and_canonical_precedence`) |
 | NC-006 | P1 | Confirmed | fixture 06 → normal 0.7 with FAULTY at 110 ms / 2.5 % loss | T24 | Confirmed |
 | NC-007 | P1 | Confirmed | `/api/runs` + `/stream` + report/details have no ownership check; stream replays raw input | T25 | Confirmed |
 | NC-008 | P2 [P1] | Confirmed (partial remedy) | upload never calls `admit()`, cleanup only on `/api/run`. Downgraded: 5 MB cap + TTL exist. Remedy "reject non-JSON early" **rejected**: malformed input must reach the normalizer (PS interop demo) | T25 | Confirmed |
@@ -41,8 +41,8 @@ Priority = ours after verification (audit priority in brackets when changed).
 | NC-010 | P1 | Confirmed | app.js:73 CRIT counts confidence ≥ 0.75 incl. normal | T26 | Confirmed |
 | NC-011 | P2 [P1] | Confirmed | app.js:67 `incidentKey` prefers static incident_id. UX only (per-browser localStorage) | T26 | Confirmed |
 | NC-012 | P2 | Confirmed | correlator.py:924-931 keeps only `confidence < winner`. Reverses T17 rule "no alternative ≥ chosen" — transparency wins; show with `overruled_by` | T24 | Confirmed |
-| NC-013 | P3 [P2] | Partially confirmed | Claim that bundled scenarios use `version` is **false** (they use `schema_version`, normal.json:176). Missing `version` alias is real (fixture 10) | T23 | Confirmed (alias only) |
-| NC-014 | P2 | Confirmed | dedupe key is raw timestamp string | T23 | Confirmed |
+| NC-013 | P3 [P2] | Partially confirmed | Claim that bundled scenarios use `version` is **false** (they use `schema_version`, normal.json:176). Missing `version` alias is real (fixture 10) | T23 | Tested (T23: `test_nc013_version_alias_has_full_quality`) |
+| NC-014 | P2 | Confirmed | dedupe key is raw timestamp string | T23 | Tested (T23: `test_nc014_dedupe_uses_utc_instant_not_timestamp_spelling`) |
 | NC-015 | P2 | Confirmed | connectivity.py:84 `add_edge` creates undeclared nodes | T25 | Confirmed |
 | NC-016 | P3 [P2] | Confirmed | app.js:436-437 root (amber) selector after bad (red) | T26 | Confirmed |
 | NC-017 | P2 | Confirmed | app.js:134 any non-normal/non-critical report → "Degraded" | T26 | Confirmed |
@@ -53,7 +53,7 @@ Priority = ours after verification (audit priority in brackets when changed).
 | NC-022 | P2 | Confirmed | renderSamples → one row per sample (≤ 50k) | T26 | Confirmed |
 | NC-023 | P3 [P2] | Confirmed | `state.failAgent` never cleared after run; CLI says "next run" | T26 | Confirmed |
 | NC-024 | P3 [P2] | Confirmed | app.js:751 "no conflicts" ignores validation issues | T26 | Confirmed |
-| NC-025 | P2 | Confirmed (merged into NC-002) | per-kind cap 0.25; fixed by quarantine + valid-coverage gate | T23 | Confirmed |
+| NC-025 | P2 | Confirmed (merged into NC-002) | per-kind cap 0.25; fixed by quarantine + valid-coverage gate | T23 | Tested (T23: `test_nc025_valid_coverage_gates_confidence_despite_penalty_cap`) |
 | NC-026 | P3 [P2] | Confirmed | index.html:144 "SWARM CONSENSUS" shows report.confidence | T26 | Confirmed |
 | NC-027 | P3 [P2] | Confirmed | app.js:890 "Probability" label on heuristic score | T26 | Confirmed |
 | NC-028 | — [P3] | **Rejected** | evidence tiles set `data-searchable` (app.js:805) and `renderSearch` selects `[data-searchable]` (app.js:254). Re-check in browser in T27 | — | Rejected |
@@ -78,6 +78,8 @@ Totals: 30 confirmed, 2 partially confirmed (NC-008 remedy, NC-013 claim), 1 rej
 - **D9 Uploads**: per-IP rate limit, total upload cap (count + bytes), cleanup on upload. Malformed JSON is still accepted (normalizer reports ERROR).
 - **D10 Chart**: newest 200 points.
 - **Gold labels**: the 16 scenarios must stay 16/16. Any intended label change needs a written reason here.
+
+T23 status: DONE. 24 new regression cases (tests/test_qa_t23.py); legacy test_normalizer duplicate/stale test updated to D1/D3 (1 sample). pytest 222 passed, evaluate 16/16.
 
 ## Matrix execution log
 

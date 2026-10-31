@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from netcoop import llm
 from netcoop.agents.base import Agent
+from netcoop.config import INSUFFICIENT_CONFIDENCE_THRESHOLD
 from netcoop.protocol import DataQuality, Envelope, Finding, MsgType
 
 
@@ -110,6 +111,8 @@ ISSUE_PENALTIES = {
     "coerced": 0.0,
     "expected_missing": 0.0,
     "no_timestamp": 0.01,
+    "conflict": 0.10,
+    "ambiguous": 0.10,
 }
 KIND_PENALTY_CAP = 0.25  # one kind of problem can never cost more than this
 KIND_REPEAT_CAP = 5      # repeats beyond this add nothing
@@ -154,6 +157,7 @@ PERCENT_FIELDS = {name for name in NUMERIC_FIELDS if name.endswith("_pct")}
 TIME_FIELDS = {"latency_ms", "jitter_ms", "response_ms"}
 NON_NEGATIVE_FIELDS = NUMERIC_FIELDS - {"rssi_dbm"} - PERCENT_FIELDS
 TOP_LEVEL_ALIASES = {
+    "version": "schema_version",
     "schemaVersion": "schema_version", "incident": "incident_id",
     "incidentId": "incident_id", "collected": "collected_at",
     "collectedAt": "collected_at",
@@ -177,6 +181,7 @@ class NormalizeResult(BaseModel):
     error: str | None = None
     mappings: list[dict[str, Any]] = []
     formats: list[str] = []
+    quarantined: list[dict[str, Any]] = []
 
 
 @dataclass
@@ -188,6 +193,8 @@ class _QualityTracker:
     source_format: str = "canonical v1"
     mappings: list[dict[str, Any]] = field(default_factory=list)
     format_flags: set[str] = field(default_factory=set)
+    quarantined: list[dict[str, Any]] = field(default_factory=list)
+    valid_coverage: float = 1.0
 
     def map(self, device_id: Any, raw_path: str, raw_value: Any, metric: str,
             value: Any, *, raw_key: str = "", factor: float = 1.0) -> None:
@@ -258,6 +265,11 @@ class _QualityTracker:
 
     def model(self, *, failed: bool = False) -> DataQuality:
         score = 0.0 if failed else max(0.0, min(1.0, 1.0 - self._penalty()))
+        score *= self.valid_coverage
+        # At most half the supplied metrics usable in any section is insufficient,
+        # even when another section contains many healthy measurements.
+        if self.valid_coverage <= 0.5:
+            score = min(score, INSUFFICIENT_CONFIDENCE_THRESHOLD - 0.01)
         return DataQuality(score=round(score, 6), issues=self._summary())
 
 
@@ -399,6 +411,20 @@ def _map_leaf_fields(raw: dict, sections: tuple[str, ...], tracker: _QualityTrac
     return result
 
 
+def _assign_metric(row: dict[str, Any], target: str, value: Any,
+                   tracker: _QualityTracker, path: str) -> None:
+    """Keep the canonical-first value only when aliases agree within 1%."""
+    if target in NUMERIC_FIELDS and target in row:
+        previous = row[target]
+        if previous is None:
+            return  # Never resurrect an already ambiguous field.
+        if not math.isclose(previous, value, rel_tol=0.01):
+            row[target] = None
+            tracker.add("ambiguous", f"ambiguous aliases at {path}.{target}; field quarantined")
+        return
+    row[target] = value
+
+
 def _normalize_row(raw: Any, section: str, tracker: _QualityTracker,
                    path: str) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
@@ -409,7 +435,8 @@ def _normalize_row(raw: Any, section: str, tracker: _QualityTracker,
     result: dict[str, Any] = {}
     owner = next((raw[k] for k in ("device_id", "device", "deviceId", "node_id", "server_id")
                   if isinstance(raw.get(k), str)), None)
-    for key, value in raw.items():
+    for key, value in sorted(raw.items(), key=lambda item: (
+            item[0] not in SECTION_FIELDS[section], str(item[0]))):
         if not isinstance(key, str):
             tracker.add("unknown", f"unknown field {path}.{key!r} dropped")
             continue
@@ -423,7 +450,7 @@ def _normalize_row(raw: Any, section: str, tracker: _QualityTracker,
             else _convert_value(value, target, factor, tracker, f"{path}.{key}")
         )
         if converted is not None:
-            result[target] = converted
+            _assign_metric(result, target, converted, tracker, path)
             if section in ("devices", "samples", "services") and (
                     target in NUMERIC_FIELDS or target == "status"):
                 tracker.map(owner, key, value, target, converted, raw_key=key, factor=factor)
@@ -487,7 +514,8 @@ def _split_metric_row(row: dict[str, Any], tracker: _QualityTracker, path: str,
     ignored = {"device_id", "device", "id", "timestamp", "status", "type", "metrics"}
     metrics = _map_leaf_fields(metrics, ('devices', 'samples'), tracker,
                                f'{path}.metrics', ignored)
-    for key, value in metrics.items():
+    for key, value in sorted(metrics.items(), key=lambda item: (
+            item[0] not in NUMERIC_FIELDS, str(item[0]))):
         if key in ignored:
             continue
         if not isinstance(key, str):
@@ -500,14 +528,14 @@ def _split_metric_row(row: dict[str, Any], tracker: _QualityTracker, path: str,
             converted = _convert_value(value, device_target, device_factor, tracker,
                                        f"{path}.metrics.{key}")
             if converted is not None:
-                device[device_target] = converted
+                _assign_metric(device, device_target, converted, tracker, path)
                 tracker.map(device.get("device_id"), raw_path, value, device_target,
                             converted, raw_key=key, factor=device_factor)
         elif sample_target is not None:
             converted = _convert_value(value, sample_target, sample_factor, tracker,
                                        f"{path}.metrics.{key}")
             if converted is not None:
-                sample[sample_target] = converted
+                _assign_metric(sample, sample_target, converted, tracker, path)
                 tracker.map(device.get("device_id"), raw_path, value, sample_target,
                             converted, raw_key=key, factor=sample_factor)
         else:
@@ -718,46 +746,92 @@ def _normalize_canonical(source: dict[str, Any], tracker: _QualityTracker) -> di
 
 
 def _validate_rows(telemetry: dict[str, Any], tracker: _QualityTracker) -> None:
+    def quarantine(row: dict, name: str, value: Any, reason: str) -> None:
+        tracker.quarantined.append({
+            "device_id": row.get("device_id", row.get("server_id")),
+            "field": name, "value": value, "reason": reason,
+        })
+
     for section in ("devices", "samples", "services"):
         for index, row in enumerate(telemetry[section]):
-            for field_name in PERCENT_FIELDS & row.keys():
-                value = row[field_name]
-                if value < 0 or value > 100:
+            for name in sorted(NUMERIC_FIELDS & row.keys()):
+                value = row[name]
+                if value is None:
+                    continue
+                limit = 60000 if name in TIME_FIELDS else 1e9
+                invalid = (
+                    (name in PERCENT_FIELDS and not 0 <= value <= 100)
+                    or (name in NON_NEGATIVE_FIELDS and not 0 <= value <= limit)
+                    or (name == "rssi_dbm" and value > 0)
+                )
+                if invalid:
+                    reason = f"out-of-range value at {section}[{index}].{name}"
+                    quarantine(row, name, value, reason)
                     tracker.add("out_of_range",
-                                f"out-of-range value at {section}[{index}].{field_name}: {value}")
-            for field_name in NON_NEGATIVE_FIELDS & row.keys():
-                value = row[field_name]
-                limit = 60000 if field_name in TIME_FIELDS else 1e9
-                if value < 0 or value > limit:
-                    tracker.add("out_of_range",
-                                f"out-of-range value at {section}[{index}].{field_name}: {value}")
+                                f"{reason}: {value}; device_id="
+                                f"{row.get('device_id', row.get('server_id'))}; quarantined")
+                    row[name] = None
 
-    parsed: list[tuple[int, datetime]] = []
-    seen: set[tuple[str, str]] = set()
-    unique_samples: list[dict[str, Any]] = []
+    # Merge first so conflicts cannot be hidden by row ordering or later rows.
+    seen: dict[tuple[str, datetime], dict[str, Any]] = {}
+    merged: list[dict[str, Any]] = []
     for index, sample in enumerate(telemetry["samples"]):
-        timestamp = sample.get("timestamp")
-        parsed_timestamp = _parse_timestamp(timestamp)
-        if timestamp is not None and parsed_timestamp is None:
+        timestamp = _parse_timestamp(sample.get("timestamp"))
+        if sample.get("timestamp") is not None and timestamp is None:
             tracker.add("wrong_type", f"invalid timestamp at samples[{index}].timestamp")
-        elif parsed_timestamp is not None:
-            parsed.append((index, parsed_timestamp))
         device_id = sample.get("device_id")
-        if isinstance(device_id, str) and isinstance(timestamp, str):
+        if isinstance(device_id, str) and timestamp is not None:
+            sample["timestamp"] = timestamp.isoformat().replace("+00:00", "Z")
             key = (device_id, timestamp)
             if key in seen:
-                tracker.add("duplicate",
-                            f"duplicate sample for device_id={device_id} timestamp={timestamp} dropped")
+                tracker.add("duplicate", f"duplicate sample for device_id={device_id} "
+                            f"timestamp={sample['timestamp']} merged")
+                previous = seen[key]
+                for name, value in sample.items():
+                    if name not in previous:
+                        previous[name] = value
+                    elif name not in {"device_id", "timestamp"} and previous[name] != value:
+                        if previous[name] is not None:
+                            quarantine(sample, name, [previous[name], value], "conflict")
+                            tracker.add("conflict", f"conflict for device_id={device_id} "
+                                        f"timestamp={sample['timestamp']} field={name}; quarantined")
+                        previous[name] = None
                 continue
-            seen.add(key)
-        unique_samples.append(sample)
+            seen[key] = sample
+        merged.append(sample)
 
-    if parsed:
-        cutoff = max(timestamp for _, timestamp in parsed) - timedelta(hours=1)
-        for index, timestamp in parsed:
-            if timestamp < cutoff:
-                tracker.add("stale", f"stale timestamp at samples[{index}].timestamp")
-    telemetry["samples"] = unique_samples
+    reference = (_parse_timestamp(telemetry.get("collected_at"))
+                 or _parse_timestamp(_latest_timestamp(merged)))
+    samples = []
+    for index, sample in enumerate(merged):
+        timestamp = _parse_timestamp(sample.get("timestamp"))
+        reason = None
+        if timestamp is not None and reference is not None:
+            if timestamp < reference - timedelta(hours=1):
+                reason = "stale timestamp"
+            elif timestamp > reference + timedelta(minutes=5):
+                reason = "future timestamp"
+        if reason is not None:
+            quarantine(sample, "timestamp", sample["timestamp"], reason)
+            tracker.add("stale", f"{reason} at samples[{index}].timestamp: "
+                        f"{sample['timestamp']}; device_id={sample.get('device_id')}; "
+                        "quarantined sample excluded")
+        else:
+            samples.append(sample)
+    telemetry["samples"] = samples
+    telemetry["quarantined"] = tracker.quarantined
+
+    # Duplicated metrics count once; rejected time windows count as lost coverage.
+    for section, rows in (("devices", telemetry["devices"]),
+                          ("samples", merged), ("services", telemetry["services"])):
+        total = sum(len(NUMERIC_FIELDS & row.keys()) for row in rows)
+        valid = sum(row[name] is not None
+                    for row in telemetry[section] for name in NUMERIC_FIELDS & row.keys())
+        if total:
+            tracker.valid_coverage = min(tracker.valid_coverage, valid / total)
+    if tracker.valid_coverage < 1:
+        tracker.add("coerced", f"valid-metric coverage: {tracker.valid_coverage:.1%}; "
+                    "quarantined or ambiguous evidence excluded")
 
 
 def normalize(raw: str | bytes | dict | list, use_llm: bool = False) -> NormalizeResult:
@@ -776,7 +850,7 @@ def normalize(raw: str | bytes | dict | list, use_llm: bool = False) -> Normaliz
         elif "metrics" in source:
             telemetry = _normalize_organizer([source], tracker)
         else:
-            version = source.get("schema_version", source.get("schemaVersion"))
+            version = source.get("schema_version", source.get("schemaVersion", source.get("version")))
             looks_legacy = version is None and ("readings" in source or "nodes" in source)
             if version in (0, 0.0, "0", "0.0", "v0") or looks_legacy:
                 telemetry = _normalize_legacy(source, tracker)
@@ -793,6 +867,7 @@ def normalize(raw: str | bytes | dict | list, use_llm: bool = False) -> Normaliz
             telemetry=telemetry, data_quality=tracker.model(),
             mappings=tracker.mappings,
             formats=[tracker.source_format, *sorted(tracker.format_flags)],
+            quarantined=tracker.quarantined,
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         log.info("invalid JSON telemetry: %s", getattr(exc, "msg", exc))
@@ -857,6 +932,7 @@ class NormalizerAgent(Agent):
             payload["telemetry"] = result.telemetry
             payload["mappings"] = result.mappings
             payload["formats"] = result.formats
+            payload["quarantined"] = result.quarantined
             return [Envelope(
                 type=MsgType.FINDING,
                 sender=self.name,

@@ -157,7 +157,7 @@ def test_duplicate_out_of_range_and_stale_samples_lower_score():
     assert "out-of-range" in issues
     assert "stale timestamp" in issues
     assert result.telemetry is not None
-    assert len(result.telemetry["samples"]) == 2
+    assert len(result.telemetry["samples"]) == 1  # D1/D3: future sample quarantined, duplicate merged
 
 
 def test_missing_optional_sections_use_empty_defaults():
