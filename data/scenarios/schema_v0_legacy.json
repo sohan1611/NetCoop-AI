@@ -1,0 +1,26 @@
+{
+  "collected_at": "2026-10-31T09:00:00Z",
+  "incident_id": "INC-T3-SCHEMA-V0-LEGACY",
+  "readings": [
+    {
+      "bandwidth": 1000.0,
+      "cpu": 97.0,
+      "drops": 12,
+      "errors": 2,
+      "id": "ACADEMIC_DIST_SW_01",
+      "jitter": 25.0,
+      "lat": 92.0,
+      "loss": 1.0,
+      "mem": 95.0,
+      "status": "degraded",
+      "throughput": 620.0,
+      "timestamp": "2026-10-31T09:00:00Z",
+      "type": "switch",
+      "util": 62.0
+    }
+  ],
+  "schema_version": "0",
+  "symptoms": [
+    "Legacy collector reports an overloaded distribution switch"
+  ]
+}

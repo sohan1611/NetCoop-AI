@@ -1,0 +1,178 @@
+{
+  "collected_at": "2026-10-31T09:00:00Z",
+  "devices": [
+    {
+      "cpu_pct": 20.36,
+      "device_id": "CORE_RTR_01",
+      "interface_errors": 0,
+      "mem_pct": 28.49,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "router"
+    },
+    {
+      "cpu_pct": 19.23,
+      "device_id": "HOSTEL_DIST_SW_01",
+      "interface_errors": 0,
+      "mem_pct": 33.34,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "switch"
+    },
+    {
+      "cpu_pct": 19.12,
+      "device_id": "ACADEMIC_DIST_SW_01",
+      "interface_errors": 0,
+      "mem_pct": 40.5,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "switch"
+    },
+    {
+      "cpu_pct": 34.07,
+      "device_id": "HOSTEL_AP_01",
+      "interface_errors": 0,
+      "mem_pct": 32.64,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "ap"
+    },
+    {
+      "cpu_pct": 23.82,
+      "device_id": "DEPT_SW_01",
+      "interface_errors": 0,
+      "mem_pct": 31.88,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "switch"
+    },
+    {
+      "cpu_pct": 31.36,
+      "device_id": "LECTURE_AP_01",
+      "interface_errors": 0,
+      "mem_pct": 41.88,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "ap"
+    },
+    {
+      "cpu_pct": 28.03,
+      "device_id": "DNS_SRV_01",
+      "interface_errors": 0,
+      "mem_pct": 35.23,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "server"
+    },
+    {
+      "cpu_pct": 34.44,
+      "device_id": "DHCP_SRV_01",
+      "interface_errors": 0,
+      "mem_pct": 45.91,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "server"
+    }
+  ],
+  "incident_id": "INC-T3-MISSING-SECTIONS",
+  "samples": [
+    {
+      "bandwidth_mbps": 1000,
+      "device_id": "CORE_RTR_01",
+      "jitter_ms": 0.99,
+      "latency_ms": 10.49,
+      "link_utilization_pct": 30.68,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": null,
+      "rssi_dbm": null,
+      "throughput_mbps": 335.88,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 1000,
+      "device_id": "HOSTEL_DIST_SW_01",
+      "jitter_ms": 2.37,
+      "latency_ms": 14.5,
+      "link_utilization_pct": 27.22,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": null,
+      "rssi_dbm": null,
+      "throughput_mbps": 316.8,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 1000,
+      "device_id": "ACADEMIC_DIST_SW_01",
+      "jitter_ms": 2.97,
+      "latency_ms": 7.82,
+      "link_utilization_pct": 29.97,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": null,
+      "rssi_dbm": null,
+      "throughput_mbps": 259.33,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 300,
+      "device_id": "HOSTEL_AP_01",
+      "jitter_ms": 2.06,
+      "latency_ms": 4.97,
+      "link_utilization_pct": 28.52,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": 1.11,
+      "rssi_dbm": -52.49,
+      "throughput_mbps": 99.64,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 1000,
+      "device_id": "DEPT_SW_01",
+      "jitter_ms": 2.39,
+      "latency_ms": 8.75,
+      "link_utilization_pct": 32.48,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": null,
+      "rssi_dbm": null,
+      "throughput_mbps": 299.71,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 300,
+      "device_id": "LECTURE_AP_01",
+      "jitter_ms": 0.95,
+      "latency_ms": 14.8,
+      "link_utilization_pct": 35.29,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": 2.51,
+      "rssi_dbm": -55.53,
+      "throughput_mbps": 76.63,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 1000,
+      "device_id": "DNS_SRV_01",
+      "jitter_ms": 1.89,
+      "latency_ms": 13.11,
+      "link_utilization_pct": 31.79,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": null,
+      "rssi_dbm": null,
+      "throughput_mbps": 298.63,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 1000,
+      "device_id": "DHCP_SRV_01",
+      "jitter_ms": 1.17,
+      "latency_ms": 14.36,
+      "link_utilization_pct": 39.16,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": null,
+      "rssi_dbm": null,
+      "throughput_mbps": 224.12,
+      "timestamp": "2026-10-31T09:00:00Z"
+    }
+  ],
+  "schema_version": "1.0",
+  "symptoms": []
+}

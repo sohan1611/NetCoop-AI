@@ -1,0 +1,285 @@
+{
+  "collected_at": "2026-10-31T09:00:00Z",
+  "devices": [
+    {
+      "cpu_pct": 35.59,
+      "device_id": "CORE_RTR_01",
+      "interface_errors": 0,
+      "mem_pct": 47.92,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "router"
+    },
+    {
+      "cpu_pct": 24.78,
+      "device_id": "HOSTEL_DIST_SW_01",
+      "interface_errors": 0,
+      "mem_pct": 45.57,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "switch"
+    },
+    {
+      "cpu_pct": 22.79,
+      "device_id": "ACADEMIC_DIST_SW_01",
+      "interface_errors": 0,
+      "mem_pct": 35.28,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "switch"
+    },
+    {
+      "cpu_pct": 32.56,
+      "device_id": "HOSTEL_AP_01",
+      "interface_errors": 0,
+      "mem_pct": 32.41,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "ap"
+    },
+    {
+      "cpu_pct": 25.97,
+      "device_id": "DEPT_SW_01",
+      "interface_errors": 0,
+      "mem_pct": 45.41,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "switch"
+    },
+    {
+      "cpu_pct": 28.61,
+      "device_id": "LECTURE_AP_01",
+      "interface_errors": 0,
+      "mem_pct": 44.99,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "ap"
+    },
+    {
+      "cpu_pct": 34.58,
+      "device_id": "DNS_SRV_01",
+      "interface_errors": 0,
+      "mem_pct": 36.34,
+      "queue_drops": 0,
+      "status": "down",
+      "type": "server"
+    },
+    {
+      "cpu_pct": 18.06,
+      "device_id": "DHCP_SRV_01",
+      "interface_errors": 0,
+      "mem_pct": 29.54,
+      "queue_drops": 0,
+      "status": "up",
+      "type": "server"
+    }
+  ],
+  "incident_id": "INC-T3-DNS-FAILURE",
+  "samples": [
+    {
+      "bandwidth_mbps": 1000,
+      "device_id": "CORE_RTR_01",
+      "jitter_ms": 1.51,
+      "latency_ms": 4.83,
+      "link_utilization_pct": 38.08,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": null,
+      "rssi_dbm": null,
+      "throughput_mbps": 252.28,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 1000,
+      "device_id": "HOSTEL_DIST_SW_01",
+      "jitter_ms": 0.52,
+      "latency_ms": 9.06,
+      "link_utilization_pct": 29.86,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": null,
+      "rssi_dbm": null,
+      "throughput_mbps": 382.52,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 1000,
+      "device_id": "ACADEMIC_DIST_SW_01",
+      "jitter_ms": 1.37,
+      "latency_ms": 11.72,
+      "link_utilization_pct": 24.85,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": null,
+      "rssi_dbm": null,
+      "throughput_mbps": 330.64,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 300,
+      "device_id": "HOSTEL_AP_01",
+      "jitter_ms": 1.94,
+      "latency_ms": 4.27,
+      "link_utilization_pct": 22.65,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": 2.33,
+      "rssi_dbm": -51.39,
+      "throughput_mbps": 70.82,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 1000,
+      "device_id": "DEPT_SW_01",
+      "jitter_ms": 2.61,
+      "latency_ms": 14.55,
+      "link_utilization_pct": 21.0,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": null,
+      "rssi_dbm": null,
+      "throughput_mbps": 252.89,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 300,
+      "device_id": "LECTURE_AP_01",
+      "jitter_ms": 0.94,
+      "latency_ms": 4.71,
+      "link_utilization_pct": 32.03,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": 1.22,
+      "rssi_dbm": -51.93,
+      "throughput_mbps": 106.38,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 1000,
+      "device_id": "DNS_SRV_01",
+      "jitter_ms": 1.14,
+      "latency_ms": 11.83,
+      "link_utilization_pct": 34.3,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": null,
+      "rssi_dbm": null,
+      "throughput_mbps": 282.08,
+      "timestamp": "2026-10-31T09:00:00Z"
+    },
+    {
+      "bandwidth_mbps": 1000,
+      "device_id": "DHCP_SRV_01",
+      "jitter_ms": 0.87,
+      "latency_ms": 12.97,
+      "link_utilization_pct": 23.06,
+      "packet_loss_pct": 0.0,
+      "retransmission_pct": null,
+      "rssi_dbm": null,
+      "throughput_mbps": 265.63,
+      "timestamp": "2026-10-31T09:00:00Z"
+    }
+  ],
+  "schema_version": "1.0",
+  "services": [
+    {
+      "name": "dns",
+      "response_ms": 1800.0,
+      "server_id": "DNS_SRV_01",
+      "status": "down",
+      "success_rate_pct": 3.0
+    },
+    {
+      "name": "dhcp",
+      "response_ms": 18.0,
+      "server_id": "DHCP_SRV_01",
+      "status": "up",
+      "success_rate_pct": 99.8
+    }
+  ],
+  "symptoms": [
+    "Hostnames do not resolve while IP connectivity remains available"
+  ],
+  "topology": {
+    "links": [
+      {
+        "capacity_mbps": 1000,
+        "dst": "HOSTEL_DIST_SW_01",
+        "src": "CORE_RTR_01"
+      },
+      {
+        "capacity_mbps": 1000,
+        "dst": "ACADEMIC_DIST_SW_01",
+        "src": "CORE_RTR_01"
+      },
+      {
+        "capacity_mbps": 1000,
+        "dst": "HOSTEL_AP_01",
+        "src": "HOSTEL_DIST_SW_01"
+      },
+      {
+        "capacity_mbps": 1000,
+        "dst": "DEPT_SW_01",
+        "src": "ACADEMIC_DIST_SW_01"
+      },
+      {
+        "capacity_mbps": 1000,
+        "dst": "LECTURE_AP_01",
+        "src": "ACADEMIC_DIST_SW_01"
+      },
+      {
+        "capacity_mbps": 1000,
+        "dst": "DNS_SRV_01",
+        "src": "CORE_RTR_01"
+      },
+      {
+        "capacity_mbps": 1000,
+        "dst": "DHCP_SRV_01",
+        "src": "CORE_RTR_01"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "CORE_RTR_01",
+        "location": "DC",
+        "role": "core",
+        "type": "router"
+      },
+      {
+        "id": "HOSTEL_DIST_SW_01",
+        "location": "Hostel",
+        "role": "distribution",
+        "type": "switch"
+      },
+      {
+        "id": "ACADEMIC_DIST_SW_01",
+        "location": "Academic Block",
+        "role": "distribution",
+        "type": "switch"
+      },
+      {
+        "id": "HOSTEL_AP_01",
+        "location": "Hostel AP Zone",
+        "role": "access",
+        "type": "ap"
+      },
+      {
+        "id": "DEPT_SW_01",
+        "location": "Department Ethernet",
+        "role": "access",
+        "type": "switch"
+      },
+      {
+        "id": "LECTURE_AP_01",
+        "location": "Lecture Hall",
+        "role": "access",
+        "type": "ap"
+      },
+      {
+        "id": "DNS_SRV_01",
+        "location": "DC",
+        "role": "service",
+        "type": "server"
+      },
+      {
+        "id": "DHCP_SRV_01",
+        "location": "DC",
+        "role": "service",
+        "type": "server"
+      }
+    ]
+  }
+}

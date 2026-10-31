@@ -1,0 +1,18 @@
+{
+  "conflicting_evidence": "insufficient_evidence",
+  "congestion": "congestion",
+  "device_overload": "device_overload",
+  "dhcp_failure": "dhcp_failure",
+  "dns_failure": "dns_failure",
+  "insufficient_data": "insufficient_evidence",
+  "interface_fault": "interface_fault",
+  "interop_renamed_fields_units": "congestion",
+  "malformed_json": "error",
+  "missing_sections": "normal",
+  "normal": "normal",
+  "org_hardware_failure": "hardware_failure",
+  "org_latency_spike": "latency_degradation",
+  "org_normal": "normal",
+  "schema_v0_legacy": "device_overload",
+  "weak_wifi": "weak_wifi"
+}

@@ -1,0 +1,13 @@
+{
+  "device_id": "SW_CAMPUS_10",
+  "metrics": {
+    "cpu_utilization_pct": 63.37,
+    "jitter_ms": 37.71,
+    "latency_ms": 393.07,
+    "link_utilization_pct": 74.67,
+    "packet_loss_pct": 0.48,
+    "queue_drops": 5
+  },
+  "status": "Warning",
+  "timestamp": "2026-10-31T09:00:00Z"
+}
