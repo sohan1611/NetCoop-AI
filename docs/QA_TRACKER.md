@@ -194,3 +194,5 @@ S20 live feature sweep (0f5dbb8): every UI feature exercised on the live site; t
 | A6 | P3 | Likely (config): uvicorn trusts X-Forwarded-For only from 127.0.0.1, so behind Vercel/Render the per-IP bucket is the proxy address; README claimed a true per-IP limit | README wording corrected; no code change (spoofable header, concurrency cap is the hard guard) |
 | A7 | P1 | Confirmed (security): numeric-string regex backtracked quadratically on whitespace: 20k spaces 1.3 s, 50 KB file 9 s on deployed code; 5 MB upload ~hours of CPU | Tested (possessive quantifiers: 1M spaces 1.6 ms; regression test) |
 | - | - | Not defects: org_hardware_failure / schema_v0_legacy remediation "not verified" because their data also contains congestion signs the hardware/CPU playbooks rightly leave alone | Accepted |
+
+S21 live re-check (9afd80c, Vercel ~10 s, Render ~60 s): BOM upload with epoch timestamp and "0.15 s" latency -> congestion 0.644 on [R1] with "weak wifi (82.7%) — separate issue on AP2" (old backend returned error for the same BOM file during rollout); 50 KB whitespace input completes in 2 s end to end.
