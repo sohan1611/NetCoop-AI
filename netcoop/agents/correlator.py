@@ -19,6 +19,7 @@ by ``correlation_id``; after two rounds the agent always returns a FINDING.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from statistics import median
 from typing import Any
 
 from netcoop.agents.base import Agent
@@ -227,6 +228,83 @@ def _device_down(telemetry: dict[str, Any]) -> bool:
         isinstance(row, dict) and str(row.get("status", "")).lower() == "down"
         for row in devices
     )
+
+
+def _graded_rows(
+    telemetry: dict[str, Any], metric: str, critical_status: bool
+) -> list[tuple[float, str | None]]:
+    """(grade, device_id) for every row that reports ``metric`` (worse = higher)."""
+    result: list[tuple[float, str | None]] = []
+    for raw_value, raw_device in _rows_for_metric(telemetry, metric):
+        if metric == "status" or metric.endswith("_status"):
+            if not isinstance(raw_value, str):
+                continue
+            grade = _status_grade(raw_value)
+            if metric == "status" and critical_status and grade >= 0.5:
+                grade = 1.0
+        else:
+            value = _number(raw_value)
+            if value is None:
+                continue
+            grade = _threshold_grade(metric, value)
+        result.append((_clamp(grade), raw_device if isinstance(raw_device, str) else None))
+    return result
+
+
+def _limits(metric: str) -> dict[str, float] | None:
+    service_metric = metric.removeprefix("dns_").removeprefix("dhcp_")
+    return THRESHOLDS.get(metric) or SERVICE_THRESHOLDS.get(service_metric)
+
+
+def _describe(metric: str, value: Any, device_id: str | None, unit: str | None) -> str | None:
+    """'link_utilization_pct 94 % on CORE_RTR_01 >= critical 90 %' for numeric metrics."""
+    number = _number(value)
+    limits = _limits(metric)
+    if number is None or limits is None:
+        return None
+    warn, crit = limits["warn"], limits["crit"]
+    inverted = metric == "rssi_dbm" or metric.endswith("success_rate_pct")
+    suffix = f" {unit}" if unit else ""
+    if inverted:
+        phrase = (f"<= critical {crit:g}{suffix}" if number <= crit
+                  else f"<= warning {warn:g}{suffix}" if number <= warn
+                  else f"within limits (warning at {warn:g}{suffix})")
+    else:
+        phrase = (f">= critical {crit:g}{suffix}" if number >= crit
+                  else f">= warning {warn:g}{suffix}" if number >= warn
+                  else f"below warning {warn:g}{suffix}")
+    where = f" on {device_id}" if device_id else ""
+    return f"{metric} {number:g}{suffix}{where} {phrase}"
+
+
+def _enrich_evidence(
+    evidence: list[dict[str, Any]], telemetry: dict[str, Any], affected: list[str]
+) -> list[dict[str, Any]]:
+    """Fill unit/threshold/interpretation and a baseline (median of the same metric on
+    unaffected devices, or None) so every evidence item is self-describing."""
+    skip = set(affected)
+    evidence = [dict(item) for item in evidence]  # never mutate the agents' findings
+    for item in evidence:
+        metric = item.get("metric")
+        if not isinstance(metric, str):
+            continue
+        item.setdefault("baseline", None)
+        if item.get("unit") is None:
+            item["unit"] = _UNITS.get(metric)
+        limits = _limits(metric)
+        if item.get("threshold") is None and limits is not None:
+            item["threshold"] = limits["warn"]
+        text = _describe(metric, item.get("value"), item.get("device_id"), item.get("unit"))
+        if text is not None:
+            item["interpretation"] = text
+        if _service_parts(metric) is None and metric not in {"status"}:
+            others = [
+                number for raw, device in _rows_for_metric(telemetry, metric)
+                if device not in skip and (number := _number(raw)) is not None
+            ]
+            if others:
+                item["baseline"] = round(median(others), 6)
+    return evidence
 
 
 def _observe_metric(
@@ -827,6 +905,7 @@ class CorrelatorAgent(Agent):
         status = "insufficient_evidence" if insufficient else "diagnosed"
         evidence, sources = self._supporting_evidence(context, winner)
         affected = self._affected_devices(context, winner)
+        evidence = _enrich_evidence(evidence, context.telemetry, affected)
         alternatives = [
             {
                 "cause": candidate.cause,
@@ -941,25 +1020,25 @@ class CorrelatorAgent(Agent):
     def _affected_devices(
         context: _RunContext, winner: _Candidate
     ) -> list[str]:
+        """Devices with a non-zero grade on the winning signature's metrics (worst first),
+        plus the topology-derived common upstream device when connectivity found one."""
         if winner.cause == "normal":
             return []
-        devices = [
-            observation.device_id
-            for observation in winner.observations.values()
-            if observation.grade > 0 and observation.device_id is not None
-        ]
-        relevance = AGENT_RELEVANCE[winner.cause]
-        for agent, finding in context.findings.items():
-            if relevance.get(agent, 0.0) < 0.5:
-                continue
-            if _hypothesis_scores(finding).get(winner.cause, 0.0) < 0.5:
-                continue
-            affected = finding.get("affected_devices")
-            if isinstance(affected, list):
-                devices.extend(
-                    item for item in affected if isinstance(item, str)
-                )
-        return list(dict.fromkeys(devices))
+        _, quality_issues, _ = _quality_details(context.findings)
+        critical_status = any("severity critical" in issue for issue in quality_issues)
+        graded: dict[str, float] = {}
+        for metric, _ in SIGNATURES[winner.cause]:
+            for grade, device_id in _graded_rows(context.telemetry, metric, critical_status):
+                if grade > 0 and device_id is not None:
+                    graded[device_id] = max(graded.get(device_id, 0.0), grade)
+        devices = [d for d, _ in sorted(graded.items(), key=lambda item: -item[1])]
+        connectivity = context.findings.get("connectivity", {})
+        for item in connectivity.get("evidence", []) if isinstance(connectivity, dict) else []:
+            if (isinstance(item, dict) and item.get("metric") == "common_upstream"
+                    and isinstance(item.get("device_id"), str)
+                    and devices and item["device_id"] not in devices):
+                devices.append(item["device_id"])
+        return devices
 
     def _error(self, envelope: Envelope, message: str) -> Envelope:
         return Envelope(

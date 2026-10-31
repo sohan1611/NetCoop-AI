@@ -109,7 +109,13 @@ ISSUE_PENALTIES = {
     "llm_mapped": 0.0,
     "coerced": 0.0,
     "expected_missing": 0.0,
+    "no_timestamp": 0.01,
 }
+KIND_PENALTY_CAP = 0.25  # one kind of problem can never cost more than this
+KIND_REPEAT_CAP = 5      # repeats beyond this add nothing
+MAX_REPORTED_ISSUES = 25
+_RECORD_KEY = re.compile(r"[A-Za-z_][A-Za-z_.]*\[\d+\]")
+_INDEX = re.compile(r"\[\d+\]")
 
 _NUMERIC_STRING = re.compile(r"^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*[A-Za-z%/]{0,8}\s*$")
 
@@ -173,20 +179,59 @@ class NormalizeResult(BaseModel):
 class _QualityTracker:
     use_llm: bool = False
     issues: list[str] = field(default_factory=list)
-    penalty: float = 0.0
+    kinds: list[str] = field(default_factory=list)
+    total_records: int = 0
 
     def add(self, kind: str, message: str) -> None:
         self.issues.append(message)
-        self.penalty += ISSUE_PENALTIES[kind]
+        self.kinds.append(kind)
+
+    def _penalty(self) -> float:
+        """Per kind: weight x repeats x share of records affected, capped per kind."""
+        by_kind: dict[str, list[str]] = {}
+        for kind, message in zip(self.kinds, self.issues):
+            by_kind.setdefault(kind, []).append(message)
+        total = 0.0
+        for kind, messages in by_kind.items():
+            keys = {match.group(0) if (match := _RECORD_KEY.search(m)) else None
+                    for m in messages}
+            share = 1.0
+            if None not in keys and self.total_records:
+                share = min(1.0, len(keys) / self.total_records)
+            raw = ISSUE_PENALTIES[kind] * min(len(messages), KIND_REPEAT_CAP) * share
+            total += min(KIND_PENALTY_CAP, raw)
+        return total
+
+    def _summary(self) -> list[str]:
+        """Collapse repeats of one issue (same text modulo row index) into one line."""
+        counts: dict[str, int] = {}
+        for message in self.issues:
+            template = _INDEX.sub("[*]", message)
+            counts[template] = counts.get(template, 0) + 1
+        first: dict[str, str] = {}
+        for message in self.issues:
+            first.setdefault(_INDEX.sub("[*]", message), message)
+        lines = []
+        for template, count in counts.items():
+            if count == 1:
+                lines.append(first[template])
+            elif self.total_records:
+                lines.append(f"{template} ({min(count, self.total_records)}/{self.total_records} records)")
+            else:
+                lines.append(f"{template} (x{count})")
+        if len(lines) > MAX_REPORTED_ISSUES:
+            extra = len(lines) - MAX_REPORTED_ISSUES
+            lines = [*lines[:MAX_REPORTED_ISSUES], f"...and {extra} more"]
+        return lines
 
     def model(self, *, failed: bool = False) -> DataQuality:
-        score = 0.0 if failed else max(0.0, min(1.0, 1.0 - self.penalty))
-        return DataQuality(score=round(score, 6), issues=self.issues.copy())
+        score = 0.0 if failed else max(0.0, min(1.0, 1.0 - self._penalty()))
+        return DataQuality(score=round(score, 6), issues=self._summary())
 
 
 def _error_result(message: str, tracker: _QualityTracker) -> NormalizeResult:
     if message not in tracker.issues:
-        tracker.issues.append(message)
+        tracker.add("unknown", message)
     return NormalizeResult(telemetry=None, data_quality=tracker.model(failed=True), error=message)
 
 
@@ -346,7 +391,8 @@ def _normalize_row(raw: Any, section: str, tracker: _QualityTracker,
         if converted is not None:
             result[target] = converted
     for required in sorted(SECTION_REQUIRED[section] - result.keys()):
-        tracker.add("missing", f"missing field {path}.{required}")
+        tracker.add("no_timestamp" if required == "timestamp" else "missing",
+                    f"missing field {path}.{required}")
     return result
 
 
@@ -383,7 +429,7 @@ def _split_metric_row(row: dict[str, Any], tracker: _QualityTracker, path: str,
     if isinstance(timestamp, str):
         sample["timestamp"] = timestamp
     elif timestamp is None:
-        tracker.add("missing", f"missing field {path}.timestamp")
+        tracker.add("no_timestamp", f"missing field {path}.timestamp")
     else:
         tracker.add("wrong_type", f"wrong type for {path}.timestamp; expected a string")
 
@@ -506,6 +552,7 @@ def _normalize_organizer(rows: list[Any], tracker: _QualityTracker) -> dict[str,
                                        default_id=f"UNKNOWN_DEVICE_{index}")
         devices.append(device)
         samples.append(sample)
+    tracker.total_records = len(rows)
     tracker.add("expected_missing", "missing section topology; using empty topology")
     tracker.add("expected_missing", "missing section services; using empty list")
     return _base_telemetry(
@@ -539,6 +586,7 @@ def _normalize_legacy(source: dict[str, Any], tracker: _QualityTracker) -> dict[
     allowed = {
         "schema_version", "nodes", "readings", "incident_id", "collected_at", "symptoms",
     }
+    tracker.total_records = len(rows)
     for key in source.keys() - allowed:
         tracker.add("unknown", f"unknown field root.{key} dropped")
     tracker.add("missing", "missing section topology; using empty topology")
@@ -601,6 +649,8 @@ def _normalize_canonical(source: dict[str, Any], tracker: _QualityTracker) -> di
     samples = _optional_section(normalized_source, "samples", tracker)
     services = _optional_section(normalized_source, "services", tracker)
     symptoms = _normalize_symptoms(normalized_source.get("symptoms", []), tracker)
+    tracker.total_records = (len(devices) + len(samples) + len(services)
+                             + len(topology["nodes"]) + len(topology["links"]))
 
     incident_id = normalized_source.get("incident_id", "UNKNOWN")
     if not isinstance(incident_id, str):

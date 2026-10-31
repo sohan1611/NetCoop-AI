@@ -79,6 +79,11 @@ class SupportingEvidence(BaseModel):
     metric: str
     value: float | int | str
     interpretation: str
+    device_id: str | None = None
+    unit: str | None = None
+    threshold: float | None = None
+    baseline: float | None = None
+    timestamp: str | None = None
 
 
 class Report(BaseModel):
