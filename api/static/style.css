@@ -1,7 +1,7 @@
 ﻿:root {
   color-scheme: dark;
   --bg: #0a0f1a; --panel: #0f1726; --panel-2: #131d2e; --border: #1e2a3d;
-  --text: #e6edf7; --muted: #8a97ab; --dim: #5b6880; --cyan: #22d3ee;
+  --text: #e6edf7; --muted: #8a97ab; --dim: #7d8aa3; --cyan: #22d3ee;
   --green: #22c55e; --amber: #f59e0b; --red: #ef4444;
   --font-ui: 'Inter', sans-serif; --font-mono: 'JetBrains Mono', monospace;
   /* Compatibility tokens for the existing Cytoscape renderer. */

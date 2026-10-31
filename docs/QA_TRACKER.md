@@ -63,7 +63,20 @@ Priority = ours after verification (audit priority in brackets when changed).
 | NC-032 | P3 | Confirmed | server.py `if scenario … elif upload_id` | T25 | Tested (T25: tests/test_api.py) |
 | NC-033 | P3 | Confirmed | `/api/runs` lists only dirs with report.json/state.json; fatal.txt-only dirs vanish | T25 | Tested (T25: tests/test_api.py) |
 
-Totals: 30 confirmed, 2 partially confirmed (NC-008 remedy, NC-013 claim), 1 rejected (NC-028).
+### Found in T27 (final QA pass)
+
+| ID | Pri | Evidence (T27) | Status |
+|---|---|---|---|
+| NC-034 | P2 | matrix A05/S12: `conflicting_evidence` report listed only `interface fault 24.5 %` as alternative while weak_wifi 0.931 / device_overload 0.906 led (visible only in limitations); capped confidence hid them | Tested (T27: tests/test_qa_t27.py) |
+| NC-035 | P3 | matrix A13: `overruled_by` existed in the correlator but the report's alternative text did not say a domain rule overruled it | Tested (T27: tests/test_qa_t27.py) |
+| NC-036 | P2 | matrix N20: duplicate device_id rows with `degraded` and `down` produced no data-quality issue | Tested (T27: tests/test_qa_t27.py) |
+| NC-037 | P2 | matrix H22/H24: worker crash (fatal.txt only) → `GET /report` returned HTTP 500 "run produced no report" | Tested (T27: tests/test_qa_t27.py) |
+| NC-038 | P3 | matrix U19: console `run bogus` hint printed humanized names ("Device overload") that `run` rejects | Tested (T27: browser) |
+| NC-039 | P2 | matrix U26/U27: `?run=<unknown or expired>` looped "Stream interrupted / Waiting for report" forever and left `state.running` true, blocking Trigger and Run until reload | Tested (T27: browser) |
+| NC-040 | P3 | matrix S15: `evidence from unrelated devices/times` (about a capped congestion candidate) appeared in a report whose winner was latency_degradation, reading as a flaw of the diagnosis | Tested (T27: tests/test_qa_t27.py) |
+| NC-041 | P3 | matrix U31: `--dim` label colour #5b6880 on #131d2e = 3.0:1 (< WCAG AA 4.5:1) for 9–10 px labels; raised to #7d8aa3 (≈4.8:1) | Tested (T27: browser contrast probe) |
+
+Totals: 30 confirmed, 2 partially confirmed (NC-008 remedy, NC-013 claim), 1 rejected (NC-028, re-checked in the browser in T27: evidence search works) from the external audit; plus 8 new defects (NC-034..NC-041) found and fixed in T27.
 
 ## Design decisions (S13)
 
@@ -101,3 +114,5 @@ T27 fills `docs/qa/TEST_MATRIX.md` Result column (Pass / Fail→NC-0xx / N/A + r
 T25 status: DONE. tests/test_api.py covers two-session isolation (list/stream/report/report.md/details/topology/remediate/upload → 404) and each NC id. pytest 241 passed, evaluate 16/16.
 
 T26 status: DONE. Browser-checked (375 px no overflow, no console errors besides a self-inflicted 429 from rapid test runs): fixture 08 upload chart ends 500 ms, normal not CRIT/Healthy, insufficient_data = Unknown/Unclassified, Acknowledge All then new run stays unacknowledged, fail-agent sent once then cleared. pytest 242 passed, evaluate 16/16. Not browser-tested: SSE retry/poll (NC-019) and samples pagination (NC-022) beyond code/test review.
+
+T27 status: DONE. All 117 matrix checks executed (Result column filled, 117/117 Pass after NC-034..NC-041 fixes); every tracker row is Tested or Rejected. pytest 247 passed, evaluate 16/16, hostile_inputs/stress_test no CRASH. Not covered: real print dialog render, screen reader, light-theme contrast (no light theme), live Render/Vercel deployment (local build only).

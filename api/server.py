@@ -293,7 +293,11 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
                             'limitations': state.limitations}).model_dump(mode='json')
             data['cause'] = 'error'
             return data
-        raise HTTPException(500, 'run produced no report')
+        reason = 'run failed before producing a report'
+        data = _report({'error': reason, 'run_id': run_id,
+                        'limitations': [reason]}).model_dump(mode='json')
+        data['cause'] = 'error'
+        return data
 
     @app.get('/api/runs/{run_id}/report.md')
     async def report_markdown(run_id: str, request: Request):

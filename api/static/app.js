@@ -294,7 +294,9 @@ async function json(url, opts) {
       // Validation/rate-limit errors are not backend availability failures.
       if (watchBackend && r.status >= 500) state.backendFailed = true;
       const detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
-      throw new Error(detail || r.statusText);
+      const err = new Error(detail || r.statusText);
+      err.status = r.status;
+      throw err;
     }
     if (watchBackend) state.backendFailed = false;
     return body;
@@ -358,6 +360,15 @@ function subscribeRun(attempt = 0, seen = new Set()) {
   const stream = new EventSource(`/api/runs/${runId}/stream`);
   source = stream;
   const current = () => source === stream && state.runId === runId;
+  const missingRun = (err) => {
+    if (err.status !== 404 || !current()) return false;
+    stream.close(); clearTimeout(recoveryTimer); source = null;
+    state.running = false; state.runId = null;
+    state.error = 'Run not found - it may have expired or belongs to another browser session.';
+    $('status').textContent = '';
+    renderShell(); renderStates(); void refreshRuns();
+    return true;
+  };
   const complete = async () => {
     if (!current()) return;
     try {
@@ -366,8 +377,8 @@ function subscribeRun(attempt = 0, seen = new Set()) {
       state.running = false; state.error = '';
       $('status').textContent = 'Run ' + runId + ' complete';
       renderShell();
-    } catch {
-      if (!current()) return;
+    } catch (err) {
+      if (!current() || missingRun(err)) return;
       $('status').textContent = 'Waiting for report; retrying connection...';
       renderStates();
       recoveryTimer = setTimeout(complete, 5000);
@@ -386,9 +397,17 @@ function subscribeRun(attempt = 0, seen = new Set()) {
     stream.close();
     if (current()) void complete();
   });
-  stream.onerror = () => {
+  stream.onerror = async () => {
     stream.close();
     if (!current()) return;
+    try {
+      await json(`/api/runs/${runId}/report`);
+      if (!current()) return;
+      await complete();
+      return;
+    } catch (err) {
+      if (!current() || missingRun(err)) return;
+    }
     $('status').textContent = attempt < 3 ? 'Stream interrupted; reconnecting...' : 'Waiting for report...';
     renderStates();
     recoveryTimer = setTimeout(() => {
@@ -417,7 +436,7 @@ function summarize(msg) {
     return 'normalized ' + (p.formats?.length ? p.formats.join(', ') : '—') +
       ', data quality ' + percent(p.data_quality?.score);
   }
-  if (p.message) return humanText(p.message);
+  if (p.message) return p.rawText ? p.message : humanText(p.message);
   if (p.action) return [label(p.action), humanText(p.reason)].filter(Boolean).join(': ');
   if (p.query_type || p.type) return label(p.query_type || p.type);
   if (p.diagnosis && p.diagnosis.cause) return 'diagnosis: ' + label(p.diagnosis.cause);
@@ -721,14 +740,14 @@ function renderBus() {
   renderSearch();
   if (changed) list.scrollTop = list.scrollHeight;
 }
-function consoleMessage(sender, recipient, text, type = 'RESPONSE') {
-  state.consoleMessages.push({ sender, recipient, type, timestamp: new Date().toISOString(), payload: { message: text } });
+function consoleMessage(sender, recipient, text, type = 'RESPONSE', rawText = false) {
+  state.consoleMessages.push({ sender, recipient, type, timestamp: new Date().toISOString(), payload: { message: text, rawText } });
   renderBus();
 }
 async function executeCommand(command) {
   consoleMessage('You', 'Orchestrator', command, 'QUERY');
   const [verb, ...args] = command.split(/\s+/), argument = args.join(' ');
-  const reply = (text, type) => consoleMessage('Orchestrator', 'You', text, type);
+  const reply = (text, type, rawText = false) => consoleMessage('Orchestrator', 'You', text, type, rawText);
   try {
     switch (verb.toLowerCase()) {
       case 'help':
@@ -737,7 +756,7 @@ async function executeCommand(command) {
         if (state.running) { reply('A diagnostic run is already running.'); break; }
         if (!state.scenariosReady) { reply('Scenarios are not available yet.'); break; }
         const option = [...$('scenario').options].find((o) => o.value === argument);
-        if (!option) { reply('Use run <scenario>. Available: ' + [...$('scenario').options].map((o) => o.value).join(', ')); break; }
+        if (!option) { reply('Use run <scenario>. Available: ' + [...$('scenario').options].map((o) => o.value).join(', '), 'RESPONSE', true); break; }
         $('scenario').value = option.value; $('file').value = '';
         $('clear-upload').hidden = true;
         await run(); reply($('status').textContent, state.runId ? 'RESPONSE' : 'ERROR'); break;

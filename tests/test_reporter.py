@@ -44,7 +44,7 @@ def test_report_from_real_pipeline(scenario, tmp_path):
     else:
         assert report.status == 'diagnosed'
         assert report.recommended_actions == PLAYBOOK[scenario]['actions']
-    saved = Report.model_validate_json((tmp_path / scenario / 'report.json').read_text())
+    saved = Report.model_validate_json((tmp_path / scenario / 'report.json').read_text(encoding='utf-8'))
     assert saved == report
     markdown = (tmp_path / scenario / 'report.md').read_text()
     for heading in ('Root cause', 'Confidence', 'Affected devices', 'Evidence', 'Alternatives', 'Actions', 'Limitations'):

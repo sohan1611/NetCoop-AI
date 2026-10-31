@@ -44,11 +44,11 @@ def test_nc001_signature_requires_local_support(connected, tmp_path):
         assert congestion >= 0.75
         assert "REMOTE" not in report["affected_devices"]
         assert all(item.get("device_id") != "REMOTE" for item in report["supporting_evidence"])
-        assert "evidence from unrelated devices/times" not in report["limitations"]
+        assert not any("evidence from unrelated devices/times" in item for item in report["limitations"])
     else:
         assert congestion < INSUFFICIENT_CONFIDENCE_THRESHOLD
         assert not (report["cause"] == "congestion" and report["confidence"] >= 0.75)
-        assert "evidence from unrelated devices/times" in report["limitations"]
+        assert any("evidence from unrelated devices/times" in item for item in report["limitations"])
 
 
 @pytest.mark.parametrize("minutes", [5, 6, 20, 24 * 60])

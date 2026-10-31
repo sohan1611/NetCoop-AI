@@ -574,7 +574,7 @@ def _candidate(
         ):
             candidate.confidence = min(candidate.confidence, INSUFFICIENT_CONFIDENCE_THRESHOLD - 0.001)
             candidate.rank = min(candidate.rank, candidate.confidence)
-            candidate.limitations.append("evidence from unrelated devices/times")
+            candidate.limitations.append(f"{cause.replace('_', ' ')}: evidence from unrelated devices/times")
     return candidate
 
 
@@ -1047,12 +1047,16 @@ class CorrelatorAgent(Agent):
         affected = self._affected_devices(context, winner)
         evidence = _enrich_evidence(evidence, context.telemetry, affected)
         alternatives = []
-        for candidate in result.ordered[1:]:
+        for candidate in (result.ordered if result.unresolved_conflict else result.ordered[1:]):
+            conflict_alternative = (
+                result.unresolved_conflict
+                and abs(winner.confidence - candidate.confidence) <= ALTERNATIVE_CONFIDENCE_WINDOW
+            )
             overruled = (
                 not insufficient and result.resolution is not None
                 and candidate.confidence >= confidence
             )
-            if not overruled and not (
+            if not conflict_alternative and not overruled and not (
                 candidate.confidence < confidence
                 and confidence - candidate.confidence <= ALTERNATIVE_CONFIDENCE_WINDOW
             ):
@@ -1061,7 +1065,9 @@ class CorrelatorAgent(Agent):
                 "cause": candidate.cause,
                 "confidence": round(candidate.confidence, 6),
             }
-            if overruled:
+            if conflict_alternative:
+                alternative["overruled_by"] = "unresolved agent conflict"
+            elif overruled:
                 alternative["overruled_by"] = result.resolution
             alternatives.append(alternative)
         _, _, quality_payload = _quality_details(context.findings)

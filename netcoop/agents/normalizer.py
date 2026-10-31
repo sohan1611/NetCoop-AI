@@ -788,6 +788,16 @@ def _validate_rows(telemetry: dict[str, Any], tracker: _QualityTracker) -> None:
                                 f"{row.get('device_id', row.get('server_id'))}; quarantined")
                     row[name] = None
 
+    statuses: dict[str, str] = {}
+    for row in telemetry["devices"]:
+        device_id, status = row.get("device_id"), row.get("status")
+        if device_id is None or status is None:
+            continue
+        if device_id in statuses and statuses[device_id] != status:
+            tracker.add("conflict", f"conflicting status for duplicate device_id={device_id}: "
+                        f"{statuses[device_id]} vs {status}")
+        statuses.setdefault(device_id, status)
+
     # Merge first so conflicts cannot be hidden by row ordering or later rows.
     seen: dict[tuple[str, datetime], dict[str, Any]] = {}
     merged: list[dict[str, Any]] = []
