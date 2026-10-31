@@ -372,6 +372,12 @@ def _select_winner(
         _grade(hardware, "cpu_pct"), _grade(hardware, "interface_errors")
     ) >= 0.5:
         return hardware, "critical device status resolves competing hardware signals"
+    if (
+        _grade(hardware, "cpu_pct") >= 1.0
+        and _grade(hardware, "interface_errors") >= 1.0
+        and max(_grade(hardware, "packet_loss_pct"), _grade(hardware, "latency_ms")) >= 1.0
+    ):
+        return hardware, "critical resource, interface and path metrics together indicate hardware failure"
 
     congestion = by_cause["congestion"]
     if (

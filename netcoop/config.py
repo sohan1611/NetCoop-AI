@@ -85,9 +85,11 @@ SIGNATURES: dict[str, list[tuple[str, float]]] = {
     ],
     "latency_degradation": [("latency_ms", 0.65), ("jitter_ms", 0.35)],
     "hardware_failure": [
-        ("status", 0.50),
+        ("status", 0.25),
         ("cpu_pct", 0.20),
-        ("interface_errors", 0.30),
+        ("interface_errors", 0.25),
+        ("packet_loss_pct", 0.15),
+        ("latency_ms", 0.15),
     ],
 }
 

@@ -1,5 +1,7 @@
 ﻿"""Acceptance checks for the real offline CLI pipeline."""
 import json
+
+import pytest
 from pathlib import Path
 import subprocess
 import sys
@@ -101,3 +103,17 @@ def test_reporter_failure_degrades(tmp_path, capsys):
     assert code == 0
     assert report.status == 'diagnosed'
     assert any(item.startswith('reporter unavailable') for item in report.limitations)
+
+
+@pytest.mark.parametrize('status', [None, 'Purple'])
+def test_org_hardware_failure_without_usable_status(tmp_path, capsys, status):
+    record = json.loads((SCENARIOS / 'org_hardware_failure.json').read_text(encoding='utf-8'))
+    record.pop('status')
+    if status:
+        record['status'] = status
+    path = tmp_path / 'hw.json'
+    path.write_text(json.dumps(record), encoding='utf-8')
+    code = main(['diagnose', str(path), '--no-llm', '--runs-dir', str(tmp_path / 'runs')])
+    report = Report.model_validate_json(capsys.readouterr().out)
+    assert code == 0
+    assert 'hardware failure' in report.suspected_root_cause
