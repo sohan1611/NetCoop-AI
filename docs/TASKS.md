@@ -22,6 +22,8 @@ Every task: add/extend pytest tests in tests/ for what it builds; `pytest -q` mu
 | T15 | DONE | — (Claude C5) | `docs/DEMO_SCRIPT.md`: 3–5 min video script — dashboard run of congestion → live agent messages → QUERY loop → report; interop/malformed input handled; `--fail-agent` degrade; simulated fix + verify; `evaluate.py` table | script fits ≤5 min |
 | T16 | DONE | medium | Fix review bugs B1–B8 below (S4 review). Owner: Sonnet until Codex quota resets | `pytest -q` passes, `evaluate` 16/16, `python scripts/stress_test.py` shows no CRASH and B2–B7 cases diagnosed correctly |
 | T17 | DONE | medium | Fix security V1–V8 and bugs B9–B14 below (S6 review). Owner: Sonnet (Codex if quota back) | `pytest -q` passes, `evaluate` 16/16, `scripts/stress_test.py` + `scripts/hostile_inputs.py` no CRASH, 20k-device input < 5 s and = normal, no report lists an alternative with confidence ≥ the chosen cause |
+| T18 | TODO | medium | Bugs N1–N7 + UI backend endpoints A1–A6 below (S8 review). Owner: Sonnet now | pytest passes, evaluate 16/16, 100 healthy org records with an extra field → `normal` ≥ 0.6, new endpoints covered in tests/test_api.py |
+| T19 | TODO | medium (Codex, after 5:24 PM) | Build the console UI exactly per `docs/UI_PLAN.md` + `docs/ui-reference/*.png`. Needs T18 A1–A6 first | UI_PLAN §7 acceptance |
 
 ## Canonical telemetry (input after normalization)
 ```json
@@ -74,6 +76,24 @@ Repro: `python scripts/stress_test.py`, `python scripts/hostile_inputs.py`.
 - **B14 LOW (optional) — brittle near thresholds.** ±15 % jitter: weak_wifi 8/10, schema_v0_legacy 7/10. Give partial credit just below `warn` (e.g. grade ramps from 0.8·warn) only if all labels still pass.
 After T17: update README robustness/security section, rerun both scripts, commit per group (V1–V3 / V4–V8 / B9–B11 / B12–B14), push.
 
+## Review findings S8 (Opus) — T18. Regression test for each
+### Bugs
+- **N1 HIGH — data-quality penalty scales with record count.** `normalizer.py` (~l.176-183) adds `ISSUE_PENALTIES[kind]` per issue, so 100 healthy organizer records each with one harmless extra field (`"vendor":"x"`) → `insufficient_evidence` 0.0; 1 record → 0.784, 10 → 0.64. Missing `timestamp` alone on healthy records gives 0.11. Fix: penalty per issue kind = weight × (affected records / total records), capped per kind; aggregate repeated issues into one limitation ("unknown field `vendor` dropped in 100/100 records"); cap limitations list at 25 + "…and n more". Missing timestamp → use collection time, minor issue.
+- **N2 MED — unrelated devices in `affected_devices`.** congestion scenario → `["CORE_RTR_01","LECTURE_AP_01"]`; LECTURE_AP_01 only has retransmission 2.02 % (barely ≥ warn 2.0), unrelated to congestion. Affected = devices with grade > 0 on the winning signature's metrics (plus topology-derived upstream root), not any warn-level metric.
+- **N3 MED — report evidence drops device/unit/threshold.** Report `supporting_evidence` items only carry metric/value/interpretation. Fill `device_id`, `unit`, `threshold` (already in `protocol.Evidence`) and add optional `baseline`; interpretation like "link_utilization_pct 94 % on CORE_RTR_01 ≥ critical 90 %". The UI needs these.
+- **N4 LOW — Vercel static pages have no security headers** (CSP/X-Frame only on Render API responses). Add `headers` block in `vercel.json` with the same set; CSP must also allow Google Fonts (`style-src … https://fonts.googleapis.com; font-src https://fonts.gstatic.com`) — update server CSP too.
+- **N5 LOW — contradictory limitation.** "Conflict resolved by domain rule: …" appears when final status is `insufficient_evidence` (stress cases nan_value, only_cpu). Only emit it when the rule actually picked the reported winner.
+- **N6 LOW — connectivity votes `interface_fault` in congestion scenario** (with topology) → "Agents disagree" noise. Vote interface_fault only when interface_errors/link-down evidence exists on the path; otherwise vote the upstream-congestion / no-opinion.
+- **N7 LOW — regression:** organizer latency_spike 59/60 → 57/60 (1 → congestion, 2 → insufficient). latency_degradation should win when latency+jitter grades dominate and utilization < crit. Check with `scripts/stress_test.py`.
+### Backend for the new UI (see docs/UI_PLAN.md)
+- **A1** report evidence fields per N3 (+ `baseline` = median of same metric on non-affected devices, or null).
+- **A2** `GET /api/runs/{id}/details` → `{incident_id, status, started_at, finished_at, rounds, window:{first,last,seconds}, formats:[str], mappings:[{source_format, device_id, raw_path, raw_value, metric, value, unit, note}] (≤50, affected devices first), agents:[{name, status: complete|flagged|alert|failed|abstained, top_hypothesis, score, evidence_count, summary, stats:{label:value}}], consensus:{engaged, total, in_accord, synchronized}, devices:[{device_id,type,role,location,status,worst_metric,worst_value,unit,severity}], latency_series:[{t,value}] (primary affected device), alternatives:[{cause, confidence, rationale}], primary_rationale}`. Normalizer must record `mappings` + detected `formats` (organizer, canonical v1, legacy v0, aliased/camel, unit-converted) in its finding.
+- **A3** `GET /api/runs` → last 20 runs `{run_id, incident_id, cause, status, confidence, created_at}`.
+- **A4** `GET /api/playbook` → playbook causes + actions.
+- **A5** `GET /api/health` → `{version, uptime_s, llm_enabled, limits:{max_upload_mb, max_devices, max_samples, runs_per_min}}`.
+- **A6** `GET /api/runs/{id}/report.md`.
+Commit groups: N1–N3 / N4–N7 / A1–A6. Push after each.
+
 ## Session log (≤10 lines per session)
 - S1 (Opus/high): problem read, PLAN + TASKS written. Next: T1. Organizer notebook read; format rules added above.
 - S2 (Sonnet/medium): T1–T9 DONE via Codex gpt-6.1-sol (T1–T7 ran at xhigh by mistake; T8–T9 low). M1 CLI cleared: `evaluate` 16/16, 85 tests. Next: T10 (llm.py, medium), T11 (evaluate script + suite, medium), T12 (API + dashboard, medium). Known nit: duplicate latency_ms evidence rows in report (dedupe in T11/T12). Codex invoke: `-m gpt-6.1-sol -c model_reasoning_effort=<per Effort col>`, run_in_background.
@@ -85,3 +105,4 @@ After T17: update README robustness/security section, rerun both scripts, commit
 - S6 (Opus security/bug hunt): T16 verified (141 tests, 16/16, no crashes). Found V1–V8 + B9–B14 → T17. Vercel SSE proxy unverified (need Vercel URL).
 - S7 (Sonnet): T17 DONE, V1–V8 + B9–B13 fixed with regression tests (182 tests, 16/16, no CRASH); B14 skipped (optional; relevance-weighted agreement already lifted weak_wifi/schema_v0 jitter to 10/10 and 9/10).
   Decisions: caps 25k devices/50k samples (2k would reject the 20k probe); sparse 2-metric 20k probe stays insufficient_evidence, new `20k_full` case = normal in ~2 s; org_hardware_failure still shows infra-vs-performance disagreement.
+- S8 (Opus): T17 verified (182 tests, 16/16, Vercel SSE proxy OK, headers OK on API). Found N1–N7 → T18 (Sonnet). UI spec written: docs/UI_PLAN.md + docs/ui-reference/ → T19 (Codex 5:24 PM, after T18 A1–A6).
