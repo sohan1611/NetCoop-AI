@@ -1,0 +1,7 @@
+{
+  "buildCommand": "",
+  "outputDirectory": "api/static",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://netcoop-ai-api.onrender.com/api/:path*" }
+  ]
+}
