@@ -835,6 +835,17 @@ function renderTelemetry() {
 $('telemetry-more').onclick = () => {
   state.telemetryExpanded = !state.telemetryExpanded; renderTelemetry(); renderSearch();
 };
+// Printed report shows every telemetry row and the limitations; restore the screen state afterwards.
+let printRestore = null;
+window.addEventListener('beforeprint', () => {
+  printRestore = { rows: state.telemetryExpanded, limits: $('report-limitations').open };
+  state.telemetryExpanded = true; $('report-limitations').open = true; renderTelemetry();
+});
+window.addEventListener('afterprint', () => {
+  if (!printRestore) return;
+  state.telemetryExpanded = printRestore.rows; $('report-limitations').open = printRestore.limits;
+  printRestore = null; renderTelemetry(); renderSearch();
+});
 function confidenceBar(value) {
   const bar = el('div', undefined, 'confidence-track');
   bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-label', 'Hypothesis confidence');
@@ -869,9 +880,13 @@ function renderHypotheses() {
     const known = Number.isFinite(a.confidence), ruledOut = a.rejected || known && a.confidence < 0.2;
     const card = el('article', undefined, 'alternative-card' + (known ? ruledOut ? ' ruled-out' : ' partial' : ''));
     const heading = el('div', undefined, 'alternative-heading');
-    heading.append(el('strong', label(a.cause)), el('span', percent(a.confidence) + ' Probability', 'mono'));
+    // Agent-level hypotheses the correlator did not pick are scores from one agent, not ruled-out causes.
+    const agentView = alternatives === rejectedHypotheses;
+    heading.append(el('strong', label(a.cause)),
+      el('span', percent(a.confidence) + (agentView ? ' Agent Score' : ' Probability'), 'mono'));
     const rationale = el('p', undefined, 'hypothesis-rationale');
-    rationale.append(el('strong', known ? ruledOut ? 'Ruled Out: ' : 'Partial Contributor: ' : '— '), el('span', humanText(a.rationale) || '—'));
+    rationale.append(el('strong', agentView ? 'Set Aside by Correlator: ' :
+      known ? ruledOut ? 'Ruled Out: ' : 'Partial Contributor: ' : '— '), el('span', humanText(a.rationale) || '—'));
     card.append(heading, confidenceBar(a.confidence), rationale); grid.append(card);
   });
   if (!alternatives.length) empty(grid, r ? 'No alternative explanations reported.' : '—');

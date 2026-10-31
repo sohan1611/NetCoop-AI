@@ -131,7 +131,7 @@ def _agent_view(name: str, state: RunState, diagnosis: dict[str, Any], failed: s
                     and (confidence or 0) >= 0.75 else "flagged" if flagged else "complete"),
             top_hypothesis=cause, score=confidence,
             evidence_count=len(diagnosis.get("evidence") or []),
-            summary=f"Concluded {cause} at {(confidence or 0):.0%} after {state.rounds} query round(s)",
+            summary=f"Concluded {cause} at {(confidence or 0):.0%} after {state.rounds} query round{'' if state.rounds == 1 else 's'}",
             stats={"Rounds": str(state.rounds), "Conflicts": str(len(diagnosis.get("conflicts") or []))})
         return base
     hypotheses = [h for h in finding.get("hypotheses") or [] if isinstance(h, dict)]

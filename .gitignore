@@ -7,3 +7,4 @@ Plan.txt
 *.egg-info/
 .pytest_cache/
 .claude/
+.pytest-tmp*/
