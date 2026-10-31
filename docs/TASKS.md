@@ -20,6 +20,7 @@ Every task: add/extend pytest tests in tests/ for what it builds; `pytest -q` mu
 | T13 | DONE | medium | `mcp_server.py` (stretch): tools `list_scenarios`, `get_telemetry`, `diagnose` | MCP inspector lists tools |
 | T14 | DONE | low | README.md: problem, architecture diagram (mermaid), agents, protocol, confidence method, error handling, setup, run, tests, scenarios, limitations, third-party acknowledgements | fresh clone setup works |
 | T15 | DONE | — (Claude C5) | `docs/DEMO_SCRIPT.md`: 3–5 min video script — dashboard run of congestion → live agent messages → QUERY loop → report; interop/malformed input handled; `--fail-agent` degrade; simulated fix + verify; `evaluate.py` table | script fits ≤5 min |
+| T16 | TODO | medium | Fix review bugs B1–B8 below (S4 review). Owner: Sonnet until Codex quota resets | `pytest -q` passes, `evaluate` 16/16, `python scripts/stress_test.py` shows no CRASH and B2–B7 cases diagnosed correctly |
 
 ## Canonical telemetry (input after normalization)
 ```json
@@ -39,8 +40,22 @@ Normalizer maps: cpu_utilization_pct→cpu_pct; metrics→device + sample rows; 
 T3 also: copy their function into `data/generator/organizer_generator.py` (seeded) and emit `org_normal.json`, `org_latency_spike.json`, `org_hardware_failure.json`. Hypothesis list gains `latency_degradation` and `hardware_failure` (replaces hardware_down).
 Never change the canonical format; adapt in the normalizer.
 
+## Review bugs (S4, Opus review) — fix in order, add a regression test for each
+Repro tool: `python scripts/stress_test.py`.
+- **B1 HIGH** — correlator or reporter failure crashes CLI/evaluate/MCP with `KeyError: 'reporter'` (`netcoop/cli.py:34` `_report`); dashboard shows `error` instead of a degraded diagnosis. README promises no exceptions. Fix in `orchestrator.py`: if correlator fails → build a fallback diagnosis (status `insufficient_evidence`, affected devices + evidence merged from analysis findings, limitation `correlator unavailable: …`); if reporter fails → orchestrator builds a minimal valid `Report` itself and stores it in `state.findings['reporter']`. `_report` must never KeyError. Test: `--fail-agent correlator` and `--fail-agent reporter` exit 0 with a valid report.
+- **B2 HIGH** — `hardware_failure` signature puts 0.50 weight on `status` (`config.py` SIGNATURES). Organizer hardware_failure record with status removed or unknown (`"Purple"`) → diagnosed `congestion`. Make metrics carry the decision: add `packet_loss_pct`, `queue_drops`, `latency_ms` (or a "multi-domain severe" rule: ≥3 domains at crit on one device → hardware_failure); reduce status weight to ≤0.25. Keep all 16 labels passing.
+- **B3 MED** — numeric strings (`"99.9"`) flagged wrong_type and dropped → insufficient_evidence. Normalizer: coerce numeric strings (strip `%`, `ms`, units) to float, record an info issue, don't drop.
+- **B4 MED** — organizer record without `device_id` not recognised (fields dropped as unknown). Detect organizer format by `metrics` key alone; default `device_id` = `UNKNOWN_DEVICE_<index>` + data-quality issue.
+- **B5 MED** — healthy organizer record → `normal` at 0.432 (low). Missing topology/services is expected for organizer format: don't count those as dq penalties when input format is organizer (still list as limitation). Target ≥0.7 for clean org_normal.
+- **B6 MED** — without LLM, CamelCase/other-style names (`CpuUtilization`, `LatencyMs`, `PacketLoss`, `QueueDrops`, `InterfaceErrors`, `LinkUtilization`) dropped. Before alias lookup: camel→snake, lowercase, strip `_pct/_ms` suffix variants; then alias table. Stress case `camel_fields` must diagnose hardware_failure.
+- **B7 LOW** — wrappers not unwrapped: `{"records"|"data"|"telemetry"|"items": [...]}` → treat inner list as input.
+- **B8 LOW** — empty input limitation reads "Leading hypotheses are close: normal=0.000…"; replace with "no usable telemetry samples supplied" when there is no evidence. Flag physically impossible values (latency > 60000 ms, counts > 1e9, pct > 100) as out-of-range.
+- **Note (not a bug fix, optional)** — rules are edge-tuned: ±15 % value jitter drops weak_wifi/congestion to 8/10. If time permits, widen grading so near-threshold values give partial credit; never break labels.
+After B1–B8: update README robustness section if behaviour changed, rerun stress test, commit per bug group.
+
 ## Session log (≤10 lines per session)
 - S1 (Opus/high): problem read, PLAN + TASKS written. Next: T1. Organizer notebook read; format rules added above.
 - S2 (Sonnet/medium): T1–T9 DONE via Codex gpt-6.1-sol (T1–T7 ran at xhigh by mistake; T8–T9 low). M1 CLI cleared: `evaluate` 16/16, 85 tests. Next: T10 (llm.py, medium), T11 (evaluate script + suite, medium), T12 (API + dashboard, medium). Known nit: duplicate latency_ms evidence rows in report (dedupe in T11/T12). Codex invoke: `-m gpt-6.1-sol -c model_reasoning_effort=<per Effort col>`, run_in_background.
 - S2 cont.: T10, T11 DONE via Codex (reviewed). Codex quota ran out during T12 (resets 5:24 PM); T12 written by Claude: `api/server.py` + `api/static/`, driven in browser (congestion, dns_failure, malformed_json, --fail-agent, simulated fix verified). Fixed T2 bug: null optional metrics were flagged wrong_type (data_quality 0.04 -> 1.0). M2 = T12. Next: T13 (MCP, stretch), T14 README, T15 demo script. Run UI: `uvicorn api.server:app`.
 - S3 (Sonnet): T13 (MCP via `mcp` 2.x `MCPServer`, optional dep `.[mcp]`), T14 README, T15 demo script all DONE, written by Claude (Codex down). 125 tests, evaluate 16/16. Next: record demo video, final repo check/submission.
+- S4 (Opus review): T1–T15 verified (125 tests, evaluate 16/16). Stress test found B1–B8 (see Review bugs). Next: T16 by Sonnet (Codex quota out).
