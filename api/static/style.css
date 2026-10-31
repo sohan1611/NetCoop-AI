@@ -361,6 +361,8 @@ ul { margin: 0; padding-left: 20px; }
   .hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .report-layout { display: block; }
   #telemetry-more { display: none !important; }
+  /* Inner cards carry their own borders; outer frames only spill onto an extra page. */
+  #hero, .diagnostic-report { border: 0; padding: 0; background: none; }
   .card { box-shadow: none; }
   #hero, #summary, #report li, #report h3 { break-inside: avoid; }
   #report h3 { break-after: avoid; }

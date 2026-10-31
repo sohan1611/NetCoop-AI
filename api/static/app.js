@@ -310,6 +310,9 @@ async function init() {
   });
   $('scenario').value = list.some((s) => s.name === selected) ? selected : list[0]?.name || '';
   state.scenariosReady = list.length > 0; renderHero(); renderStates();
+  // `?run=<id>` opens a finished run directly (shareable report links, README screenshots).
+  const deepRun = new URLSearchParams(location.search).get('run');
+  if (deepRun && /^[\w-]{1,64}$/.test(deepRun)) selectRun({ run_id: deepRun });
 }
 
 // Single data-loading/subscription layer: all endpoint calls stay in these helpers.
@@ -862,7 +865,8 @@ function renderHypotheses() {
   $('hypotheses-section').hidden = rejected;
   $('hypotheses-empty').hidden = !rejected;
   if (rejected) return;
-  primary.append(el('p', 'Primary Hypothesis: ' + label(r?.cause) + ' on ' + (r?.affected_devices?.join(', ') || '—') +
+  const devices = r?.affected_devices?.join(', ');
+  primary.append(el('p', 'Primary Hypothesis: ' + label(r?.cause) + (devices ? ' on ' + devices : '') +
     ' — ' + percent(r?.confidence) + ' (' + label(r?.confidence_category) + ' Confidence)', 'primary-title mono'),
     confidenceBar(r?.confidence), el('p', humanText(d?.primary_rationale) || '—', 'hypothesis-rationale'));
   // /details exposes each analysis agent's top hypothesis and its actual score.

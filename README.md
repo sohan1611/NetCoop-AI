@@ -2,6 +2,12 @@
 
 TechZephyr 4.0 Agentic AI Hackathon entry. Specialised agents analyse synthetic campus-network telemetry, exchange structured messages over a documented protocol, and produce one evidence-based diagnostic report. When the data does not support a diagnosis the system says **insufficient evidence** instead of guessing.
 
+**Live console:** https://netcoop-ai.vercel.app (API on Render free tier: the first request after idle can take up to ~50 s while the backend wakes; the page shows a "Waking diagnostic backend…" banner meanwhile)
+**Demo video (3–5 min):** _link added at submission_
+**Repo:** https://github.com/sohan1611/NetCoop-AI
+
+![NetCoop AI console after a congestion run](docs/screenshots/console.png)
+
 ## Problem
 Campus network faults (congestion, weak Wi-Fi, failing interfaces, overloaded devices, DNS/DHCP outages) show up as overlapping symptoms in telemetry that arrives in inconsistent formats. NetCoop AI normalises the data, lets agents inspect it from different angles, resolves their disagreements, and reports root cause, affected devices, evidence, alternatives, confidence and corrective actions (simulated only).
 
@@ -67,14 +73,37 @@ python -m netcoop remediate <run_id> --approve     # simulated fix, re-diagnose,
 uvicorn api.server:app                              # dashboard at http://127.0.0.1:8000
 python mcp_server.py                                # optional MCP server (pip install -e ".[mcp]")
 ```
-Dashboard: pick or upload a scenario, watch live agent messages, see the topology with affected nodes highlighted, read the report, and approve the simulated fix. MCP tools: `list_scenarios`, `get_telemetry`, `diagnose`.
+MCP tools: `list_scenarios`, `get_telemetry`, `diagnose`.
+
+### Console UI
+Open http://127.0.0.1:8000 (or the live link above). Everything on the page comes from the API; nothing is hard-coded.
+- **Run:** *Trigger Swarm Diagnostic Run* runs the selected scenario (default `congestion`). *Spawn Agent Run* opens the run modal: pick a scenario or upload your own telemetry JSON (canonical, legacy v0 or the organizer's format), and optionally kill an agent (`fail infrastructure`, etc.) to watch the run degrade gracefully.
+- **Console view:** hero status cards, the 5-agent coordination pipeline with live status pills, the unified report (root cause, affected devices, evidence tiles with baselines, raw → normalized telemetry mapping, primary and alternative hypotheses, limitations, playbook actions), latency/loss/consensus cards, and the live agent message bus (SSE).
+- **Other views:** Topology (affected nodes red, upstream root amber; click a node for its metrics), Incidents (all runs; click one to reopen it), Agent Pipeline (messages per agent), Telemetry Stream (full bus + normalized samples), Device Mesh, Automated Playbooks, CLI Terminal (type `help`), Telemetry Feeds / System Settings (API limits).
+- **Simulated fix:** *Apply Simulated Remediation* patches a copy of the telemetry, re-diagnoses and shows before → after with `verified: true/false`. Nothing touches real infrastructure.
+- **Export:** JSON (`/api/runs/<id>/report`), Markdown (`/report.md`) or *Print / Save PDF*, which uses a light print stylesheet that lists every telemetry row and the limitations.
+- **Share a run:** `/?run=<run_id>` opens a finished run directly.
+- Works down to 375 px wide (mobile tabs, no horizontal scroll).
+
+![Print / Save PDF output for the congestion run](docs/screenshots/report-pdf.png)
 
 ## Tests
 ```bash
 pytest -q
 python scripts/evaluate.py
 ```
-`evaluate` runs every labelled scenario and prints expected vs. got, confidence and pass/fail.
+`evaluate` runs every labelled scenario and prints expected vs. got, confidence and pass/fail. Current results: **198 tests pass**, **evaluate 16/16**. `python scripts/stress_test.py` and `python scripts/hostile_inputs.py` throw malformed, hostile and oversized inputs at the pipeline and report any crash (none today).
+
+## Submission checklist (problem statement §7)
+| Deliverable | Where |
+|---|---|
+| Source code (GitHub repo) | this repository: `netcoop/` (agents, bus, orchestrator), `api/` (FastAPI + console UI), `mcp_server.py` |
+| Demo video, 3–5 min | link at the top; script in [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) |
+| README / architecture docs | this file, [docs/PLAN.md](docs/PLAN.md) (design), [docs/PROTOCOL.md](docs/PROTOCOL.md) (agent messages), [docs/UI_PLAN.md](docs/UI_PLAN.md) (console) |
+| Sample data | `data/scenarios/*.json` (16 scenarios incl. organizer format) + `labels.json` |
+| Test cases | `tests/` (pytest), `scripts/evaluate.py`, `scripts/stress_test.py`, `scripts/hostile_inputs.py` |
+| Runnable prototype | `python -m netcoop diagnose …` (CLI), `uvicorn api.server:app` (console), live link above |
+| Structured report (JSON) | `runs/<id>/report.json` and `GET /api/runs/<id>/report`; fields under *Output format* |
 
 ## Scenarios
 In `data/scenarios/` (regenerate with `python scripts/gen_scenarios.py`): normal, congestion, weak_wifi, interface_fault, device_overload, dns_failure, dhcp_failure, interop_renamed_fields_units, schema_v0_legacy, missing_sections, malformed_json, conflicting_evidence, insufficient_data, and the organizer-format files `org_normal`, `org_latency_spike`, `org_hardware_failure`. Expected causes are in `labels.json`.
