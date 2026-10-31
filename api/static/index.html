@@ -74,6 +74,7 @@
 <main id="main" data-view="console">
   <div id="backend-banner" class="backend-banner" role="status" hidden><span>Waking diagnostic backend...</span><button id="backend-retry" class="button outline">Retry connection</button></div>
   <p id="status" class="muted workflow-status" role="status" hidden></p>
+  <p class="muted synthetic-notice">Bundled scenarios use synthetic data for demonstration.</p>
   <div id="view-console" class="view" data-view-panel="console">
     <section id="hero" class="card hero-card" aria-labelledby="hero-title">
       <div class="hero-top">
@@ -141,7 +142,7 @@
         </section>
         <section id="rail-stats" class="rail-stats" aria-label="Loss and consensus">
           <article class="card rail-stat"><h2 class="mono stat-label">PACKET LOSS RATE</h2><strong id="packet-loss" class="metric-value">—</strong><p id="packet-loss-device" class="rail-stat-detail">—</p></article>
-          <article class="card rail-stat"><h2 class="mono stat-label">SWARM CONSENSUS</h2><strong id="rail-confidence" class="metric-value cyan">—</strong><p id="rail-accord" class="rail-stat-detail cyan">—</p></article>
+          <article class="card rail-stat"><h2 class="mono stat-label">Root-Cause Confidence</h2><strong id="rail-confidence" class="metric-value cyan">—</strong><p id="rail-accord" class="rail-stat-detail cyan">—</p></article>
         </section>
         <section id="agent-bus" class="card agent-bus" tabindex="-1" aria-labelledby="bus-title">
           <header class="bus-heading"><h2 id="bus-title"><svg class="icon" aria-hidden="true"><use href="#icon-messages"/></svg>Agent Inter-Communication Bus</h2><span id="bus-live" class="bus-live" role="img" aria-label="Bus idle"></span></header>
@@ -155,7 +156,7 @@
   <section id="view-topology" class="view card" data-view-panel="topology" hidden><h2>Live Topology</h2><div id="topo" role="region" aria-label="Network topology"></div><p class="muted legend"><span class="dot bad"></span> affected <span class="dot root"></span> upstream root <span class="dot ok"></span> other</p><div id="topology-device" class="device-metrics"><p class="muted">Select a node to inspect its metrics.</p></div></section>
   <section id="view-incidents" class="view card" data-view-panel="incidents" hidden><h2>Correlated Incidents</h2><div id="incidents-table"></div></section>
   <section id="view-pipeline" class="view" data-view-panel="pipeline" hidden><div id="pipeline-slot"></div><section class="card"><h2>Per-Agent Messages</h2><div id="agent-messages"></div></section></section>
-  <section id="view-telemetry" class="view" data-view-panel="telemetry" hidden><h2>Telemetry Stream</h2><div id="telemetry-bus-slot"></div><section class="card"><h2>Normalized Samples</h2><div id="samples-table"></div></section></section>
+  <section id="view-telemetry" class="view" data-view-panel="telemetry" hidden><h2>Telemetry Stream</h2><div id="telemetry-bus-slot"></div><section class="card"><h2>Normalized Samples</h2><div id="samples-table"></div><nav class="samples-pagination" aria-label="Samples pages"><button id="samples-prev" class="button outline" disabled>Previous</button><span id="samples-page" class="mono muted" aria-live="polite"></span><button id="samples-next" class="button outline" disabled>Next</button></nav></section></section>
   <section id="view-devices" class="view card" data-view-panel="devices" hidden><h2>Device Mesh</h2><div id="devices-table"></div></section>
   <section id="view-playbooks" class="view card" data-view-panel="playbooks" hidden><h2>Automated Playbooks</h2><p class="muted">Simulated remediation — playbooks operate on copied telemetry.</p><div id="playbooks-list"></div></section>
   <section id="view-terminal" class="view" data-view-panel="terminal" hidden><h2>CLI Terminal</h2><p class="muted">Local commands. Type help to list commands.</p><div id="terminal-bus-slot"></div></section>
@@ -166,6 +167,7 @@
   <dialog id="run-modal" aria-labelledby="run-modal-title">
     <form id="run-form">
       <h2 id="run-modal-title">Spawn Agent Run</h2>
+      <p class="muted">Bundled scenarios contain synthetic data.</p>
       <label class="modal-field" for="scenario">Scenario (expected diagnosis)<select id="scenario" required></select></label>
       <label class="modal-field" for="file">Or upload telemetry (JSON, max 5 MB)<input type="file" id="file" accept=".json,application/json"></label>
       <button id="clear-upload" type="button" class="button outline" hidden>Use selected scenario</button>

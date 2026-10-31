@@ -4,11 +4,12 @@ const state = {
   runId: null, health: null, runs: null, report: null, details: null,
   messages: [], consoleMessages: [], topology: null, view: 'console', search: '', acknowledged: readAcknowledged(),
   running: false, scenariosReady: false, failAgent: null, remediation: null, remediating: false, telemetryExpanded: false,
-  playbooks: null, playbooksError: '', backendPending: 0, backendFailed: false, error: '',
+  playbooks: null, playbooksError: '', backendPending: 0, backendFailed: false, error: '', samplePage: 0,
 };
-let cy = null, source = null;
+let cy = null, source = null, recoveryTimer = null;
 const NO_SAMPLES = [];
 let renderedSamples = null;
+let renderedSamplePage = -1;
 const ACK_KEY = 'netcoop.acknowledged';
 // Presentation labels only; identifiers and API payloads retain their original values.
 const LABELS = {
@@ -64,12 +65,16 @@ function readAcknowledged() {
     return new Set(Array.isArray(saved) ? saved.filter((id) => typeof id === 'string') : []);
   } catch { return new Set(); }
 }
-function incidentKey(run) { return run.incident_id || run.run_id; }
+function incidentKey(run) { return run.run_id; }
+function isFault(report) {
+  return report?.status === 'diagnosed' && !!report.cause &&
+    !['normal', 'insufficient_data', 'insufficient_evidence', 'error', 'unknown'].includes(report.cause);
+}
 function renderTopBar() {
   $('campus-subtitle').textContent = 'Campus Core Grid • ' + (state.report?.incident_id || 'idle');
 }
 function renderSidebar() {
-  const critical = state.runs?.filter((r) => r.status === 'diagnosed' && r.confidence >= 0.75 &&
+  const critical = state.runs?.filter((r) => isFault(r) && r.confidence >= 0.75 &&
     !state.acknowledged.has(incidentKey(r)));
   $('critical-badge').hidden = !critical?.length;
   $('critical-badge').textContent = critical ? critical.length + '\nCRIT' : '—';
@@ -78,7 +83,7 @@ function renderSidebar() {
 }
 const PIPELINE_AGENTS = [
   ['normalizer', 'INGESTION'], ['performance', 'PERFORMANCE'],
-  ['infrastructure', 'INFRASTRUCTURE'], ['connectivity', 'TOPOLOGY'], ['correlator', 'RCA'],
+  ['infrastructure', 'INFRASTRUCTURE'], ['connectivity', 'TOPOLOGY'], ['correlator', 'RCA'], ['reporter', 'REPORT'],
 ];
 const AGENT_STATUSES = new Set(['pending', 'running', 'complete', 'flagged', 'alert', 'failed', 'abstained', 'synthesizing', 'skipped']);
 function inputRejected() {
@@ -119,9 +124,10 @@ function renderHero() {
   let health = '—', tone = '';
   if (inputRejected()) { health = 'Unknown — input rejected'; tone = 'muted'; }
   else if (r?.status === 'diagnosed' && r.cause === 'normal') { health = 'Healthy'; tone = 'complete'; }
-  else if (r?.status === 'diagnosed' && r.cause && r.confidence >= 0.75) {
+  else if (isFault(r) && r.confidence >= 0.75) {
     health = 'Critical'; tone = 'alert';
-  } else if (r) { health = 'Degraded'; tone = 'flagged'; }
+  } else if (isFault(r)) { health = 'Degraded'; tone = 'flagged'; }
+  else if (r) { health = 'Unknown'; tone = 'muted'; }
   $('mesh-health').textContent = health === '—' ? health : 'Campus Mesh: ' + health;
   $('mesh-health').className = tone;
   $('mesh-health-dot').className = 'health-dot ' + tone;
@@ -140,10 +146,11 @@ function renderHero() {
   $('active-incident').textContent = !inputRejected() && r?.incident_id ? 'Active Incident: ' + r.incident_id : '—';
   const severity = $('incident-severity');
   severity.hidden = !r || inputRejected();
-  const high = r?.status === 'diagnosed' && r.cause && r.cause !== 'normal' && r.confidence >= 0.75;
+  const high = isFault(r) && r.confidence >= 0.75;
   const medium = r?.confidence_category === 'medium';
   const low = ['low', 'insufficient'].includes(r?.confidence_category);
-  severity.textContent = high ? 'P1 CRIT' : medium ? 'P2' : low ? 'P3' : '—';
+  const unclassified = r && !isFault(r) && r.cause !== 'normal';
+  severity.textContent = unclassified ? 'Unclassified' : high ? 'P1 CRIT' : medium ? 'P2' : low ? 'P3' : '—';
   severity.className = 'pill ' + (high ? 'alert' : medium ? 'flagged' : '');
 }
 // SSE is the live source; /details replaces these projections after the run ends.
@@ -167,6 +174,9 @@ function liveAgent(name) {
       if (Number.isFinite(p.data_quality?.score)) view.summary += '; data quality ' + Math.round(p.data_quality.score * 100) + '%';
       view.stats = { Ingested: Array.isArray(p.telemetry?.samples) ? counted(p.telemetry.samples.length, 'sample') : '—',
         Mapped: Array.isArray(p.mappings) ? counted(p.mappings.length, 'field') : '—' };
+    } else if (name === 'reporter') {
+      view.status = p.report ? 'complete' : 'abstained';
+      view.summary = p.report ? 'Unified report assembled' : 'No report produced';
     } else if (name === 'correlator') {
       const diagnosis = p.diagnosis || {};
       view.status = diagnosis.cause && diagnosis.cause !== 'normal' ?
@@ -331,36 +341,61 @@ async function loadPlaybooks() {
   catch (err) { state.playbooksError = err.message; }
   renderPlaybooks();
 }
-async function loadRunData() {
-  state.report = await json(`/api/runs/${state.runId}/report`);
+async function loadRunData(runId = state.runId) {
+  const report = await json(`/api/runs/${runId}/report`);
+  if (state.runId !== runId) return;
+  state.report = report;
   const results = await Promise.allSettled([
-    json(`/api/runs/${state.runId}/details`), json(`/api/runs/${state.runId}/topology`), refreshShellData(),
+    json(`/api/runs/${runId}/details`), json(`/api/runs/${runId}/topology`), refreshShellData(),
   ]);
+  if (state.runId !== runId) return;
   state.details = results[0].status === 'fulfilled' ? results[0].value : null;
   state.topology = results[1].status === 'fulfilled' ? results[1].value : null;
   renderShell(); drawTopology(); renderSearch();
 }
-function subscribeRun() {
+function subscribeRun(attempt = 0, seen = new Set()) {
   const runId = state.runId;
   const stream = new EventSource(`/api/runs/${runId}/stream`);
   source = stream;
-  stream.onmessage = (e) => {
-    if (source !== stream) return;
-    try { addMessage(JSON.parse(e.data)); }
-    catch { state.error = 'Error: unreadable stream message'; renderStates(); }
+  const current = () => source === stream && state.runId === runId;
+  const complete = async () => {
+    if (!current()) return;
+    try {
+      await loadRunData(runId);
+      if (!current()) return;
+      state.running = false; state.error = '';
+      $('status').textContent = 'Run ' + runId + ' complete';
+      renderShell();
+    } catch {
+      if (!current()) return;
+      $('status').textContent = 'Waiting for report; retrying connection...';
+      renderStates();
+      recoveryTimer = setTimeout(complete, 5000);
+    }
   };
-  stream.addEventListener('done', async () => {
+  stream.onmessage = (e) => {
+    if (!current()) return;
+    try {
+      const msg = JSON.parse(e.data);
+      // Reconnected streams replay the log from the beginning.
+      const key = msg.msg_id || JSON.stringify(msg);
+      if (!seen.has(key)) { seen.add(key); addMessage(msg); }
+    } catch { state.error = 'Error: unreadable stream message'; renderStates(); }
+  };
+  stream.addEventListener('done', () => {
     stream.close();
-    if (source !== stream) return;
-    try { await loadRunData(); $('status').textContent = 'Run ' + state.runId + ' complete'; }
-    catch (err) { state.error = 'Error: ' + err.message; }
-    if (source !== stream) return;
-    state.running = false; renderShell();
+    if (current()) void complete();
   });
   stream.onerror = () => {
     stream.close();
-    if (source !== stream) return;
-    state.running = false; state.error = 'Stream disconnected. Select the incident to reload this run.'; renderShell();
+    if (!current()) return;
+    $('status').textContent = attempt < 3 ? 'Stream interrupted; reconnecting...' : 'Waiting for report...';
+    renderStates();
+    recoveryTimer = setTimeout(() => {
+      if (!current()) return;
+      if (attempt < 3) subscribeRun(attempt + 1, seen);
+      else void complete();
+    }, 1000 * 2 ** attempt);
   };
 }
 
@@ -433,8 +468,8 @@ function drawTopology() {
     style: [
       { selector: 'node', style: { label: 'data(label)', 'font-size': 9, color: col('--fg'), 'text-valign': 'bottom',
         'background-color': col('--ok') } },
-      { selector: 'node[bad = 1]', style: { 'background-color': col('--bad'), width: 28, height: 28 } },
       { selector: 'node[root = 1]', style: { 'background-color': col('--amber'), width: 30, height: 30 } },
+      { selector: 'node[bad = 1]', style: { 'background-color': col('--bad'), width: 28, height: 28 } },
       { selector: 'edge', style: { width: 2, 'line-color': col('--muted') } },
     ],
     layout: { name: 'breadthfirst', directed: true, padding: 10 },
@@ -498,10 +533,18 @@ function renderAgentMessages() {
 function renderSamples() {
   // Historical runs replay their SSE log, including the normalizer finding.
   const rows = findingPayload('normalizer').telemetry?.samples || NO_SAMPLES;
-  if (rows === renderedSamples) return;
+  if (rows !== renderedSamples) state.samplePage = 0;
+  if (rows === renderedSamples && state.samplePage === renderedSamplePage) return;
   renderedSamples = rows;
+  const pages = Math.max(1, Math.ceil(rows.length / 100));
+  state.samplePage = Math.max(0, Math.min(state.samplePage, pages - 1));
+  renderedSamplePage = state.samplePage;
   const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
-  renderTable('samples-table', keys.map((key) => [label(key), (r) => r[key]]), rows);
+  renderTable('samples-table', keys.map((key) => [label(key), (r) => r[key]]),
+    rows.slice(state.samplePage * 100, (state.samplePage + 1) * 100));
+  $('samples-page').textContent = `Page ${state.samplePage + 1} of ${pages} / ${counted(rows.length, 'sample')}`;
+  $('samples-prev').disabled = state.samplePage === 0;
+  $('samples-next').disabled = state.samplePage >= pages - 1;
 }
 function renderDevices() {
   renderTable('devices-table', [
@@ -742,22 +785,24 @@ function renderReport() {
   $('report-state').textContent = !r ? state.running ? 'Agents correlating…' : state.runId ? 'No report available.' : '' : '';
   $('report-state').hidden = !!r || (!state.running && !state.runId);
   $('report-content').hidden = !r && (state.running || !!state.runId);
-  $('correlation-hash').textContent = 'CORRELATION HASH: ' + (r?.run_id ? '#' + r.run_id : '—');
+  $('correlation-hash').textContent = 'RUN ID: ' + (r?.run_id ? '#' + r.run_id : '—');
   const normalizer = findingPayload('normalizer');
   const formats = normalizer.formats || d?.formats || [], mappings = normalizer.mappings || d?.mappings || [];
   const availableFormats = [...new Set([...formats, ...mappings.map((m) => m.source_format)].filter(Boolean))];
+  const issueCount = normalizer.data_quality?.issues?.length ?? d?.validation_issues ?? 0;
+  const validation = issueCount ? counted(issueCount, 'validation issue') : 'no conflicts';
   const converted = mappings.filter((m) => m.note || m.raw_value !== m.value).length;
   $('format-normalization').textContent = 'Format Normalization: ' + (availableFormats.length ?
-    availableFormats.length === 1 && !converted ? availableFormats[0] + ' · no conflicts' :
+    availableFormats.length === 1 && !converted ? availableFormats[0] + ' · ' + validation :
       availableFormats.length + (availableFormats.length === 1 ? ' format' : ' formats') + ' reconciled (' + availableFormats.join(', ') +
-      ') · ' + converted + (converted === 1 ? ' field' : ' fields') + ' converted' : '—');
+      ') · ' + converted + (converted === 1 ? ' field' : ' fields') + ' converted · ' + validation : issueCount ? validation : '—');
   renderRootCause(); renderAffectedDevices(); renderEvidence(); renderTelemetry(); renderHypotheses(); renderActions();
   renderSearch();
 }
 function renderRootCause() {
   const r = state.report, w = sampleWindow(), box = $('summary');
   box.replaceChildren();
-  const exceptional = r && ['insufficient_evidence', 'error'].includes(r.status);
+  const exceptional = r && ['insufficient_data', 'insufficient_evidence', 'error', 'unknown'].includes(r.status);
   box.className = 'root-cause' + (exceptional ? r.status === 'error' ? ' error' : ' insufficient' : '');
   const calloutLabel = el('p', r?.status === 'error' ? 'INPUT REJECTED' : exceptional ? 'INSUFFICIENT EVIDENCE' : 'SYNTHESIZED PROBABLE ROOT CAUSE', 'mono callout-label');
   if (!exceptional) calloutLabel.append(el('strong', r?.cause ? ' / ' + label(r.cause) : ''));
@@ -887,7 +932,7 @@ function renderHypotheses() {
     // Agent-level hypotheses the correlator did not pick are scores from one agent, not ruled-out causes.
     const agentView = alternatives === rejectedHypotheses;
     heading.append(el('strong', label(a.cause)),
-      el('span', percent(a.confidence) + (agentView ? ' Agent Score' : ' Probability'), 'mono'));
+      el('span', percent(a.confidence) + (agentView ? ' Agent Score' : ' Heuristic Score'), 'mono'));
     const rationale = el('p', undefined, 'hypothesis-rationale');
     rationale.append(el('strong', agentView ? 'Set Aside by Correlator: ' :
       known ? ruledOut ? 'Ruled Out: ' : 'Partial Contributor: ' : '— '), el('span', humanText(a.rationale) || '—'));
@@ -938,6 +983,7 @@ $('remediate-confirm').onclick = async () => {
 };
 
 function resetRun() {
+  clearTimeout(recoveryTimer); recoveryTimer = null;
   if (source) { source.close(); source = null; }
   state.error = ''; state.remediation = null; $('remediate-modal').close();
   state.runId = null; state.report = null; state.details = null; state.topology = null;
@@ -965,6 +1011,8 @@ async function run(useUpload = true) {
     else body.scenario = $('scenario').value || 'congestion';
     state.runId = (await json('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body) })).run_id;
+    state.failAgent = null;
+    $('fail-options').querySelectorAll('input').forEach((input) => { input.checked = false; });
     $('status').textContent = 'Run ' + state.runId + (body.fail_agent ? ' · failure injection: ' + body.fail_agent : '');
     $('run-modal').close();
     renderShell(); subscribeRun();
@@ -1014,6 +1062,8 @@ document.addEventListener('click', (event) => { if (!event.target.closest('.expo
 // Keep relative sweep time current without refetching the finished run.
 setInterval(() => { if (state.details?.finished_at) renderHero(); }, 1000);
 $('run-form').addEventListener('submit', (event) => { event.preventDefault(); void run(); });
+$('samples-prev').onclick = () => { state.samplePage--; renderSamples(); };
+$('samples-next').onclick = () => { state.samplePage++; renderSamples(); };
 // /api/run accepts one fail_agent; checkboxes are mutually exclusive.
 ['normalizer', 'performance', 'infrastructure', 'connectivity', 'correlator', 'reporter'].forEach((name) => {
   const label = el('label'), input = el('input'); input.type = 'checkbox'; input.value = name;

@@ -101,7 +101,7 @@ def _latency_series(telemetry: dict[str, Any], affected: list[str]) -> list[dict
         if value is not None and stamp is not None:
             points.append((stamp, row["timestamp"], value))
     points.sort(key=lambda p: p[0])
-    return [{"t": raw, "value": value} for _, raw, value in points[:MAX_SERIES]]
+    return [{"t": raw, "value": value} for _, raw, value in points[-MAX_SERIES:]]
 
 
 def _agent_view(name: str, state: RunState, diagnosis: dict[str, Any], failed: set[str]) -> dict[str, Any]:
@@ -199,6 +199,7 @@ def build_details(state: RunState, messages: list[dict[str, Any]]) -> dict[str, 
         "rounds": state.rounds,
         "window": _window(telemetry.get("samples") or []),
         "formats": list(normalizer.get("formats") or []),
+        "validation_issues": len((normalizer.get("data_quality") or {}).get("issues") or []),
         "mappings": mappings,
         "agents": agents,
         "consensus": consensus,

@@ -444,3 +444,18 @@ def test_nc033_fatal_and_message_only_runs_listed_as_error(tmp_path, monkeypatch
         rows = {row['run_id']: row for row in c.get('/api/runs').json()}
         for failed in (run_id, 'messagesonly'):
             assert rows[failed]['status'] == rows[failed]['cause'] == 'error'
+
+
+def test_details_keeps_newest_200_latency_points(tmp_path):
+    raw = (server.ROOT / 'tests' / 'fixtures' / 'qa' /
+           '08_last_five_samples_missing_from_chart.json').read_bytes()
+    samples = json.loads(raw)['samples']
+    with TestClient(create_app(tmp_path)) as c:
+        upload = c.post('/api/upload', content=raw).json()['upload_id']
+        run_id = c.post('/api/run', json={'upload_id': upload}).json()['run_id']
+        c.get(f'/api/runs/{run_id}/report')
+        series = c.get(f'/api/runs/{run_id}/details').json()['latency_series']
+    assert len(series) == 200
+    assert series == [{'t': row['timestamp'], 'value': row['latency_ms']}
+                      for row in samples[-200:]]
+    assert series[-1]['value'] == 500
