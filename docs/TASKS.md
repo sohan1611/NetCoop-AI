@@ -20,7 +20,7 @@ Every task: add/extend pytest tests in tests/ for what it builds; `pytest -q` mu
 | T13 | DONE | medium | `mcp_server.py` (stretch): tools `list_scenarios`, `get_telemetry`, `diagnose` | MCP inspector lists tools |
 | T14 | DONE | low | README.md: problem, architecture diagram (mermaid), agents, protocol, confidence method, error handling, setup, run, tests, scenarios, limitations, third-party acknowledgements | fresh clone setup works |
 | T15 | DONE | — (Claude C5) | `docs/DEMO_SCRIPT.md`: 3–5 min video script — dashboard run of congestion → live agent messages → QUERY loop → report; interop/malformed input handled; `--fail-agent` degrade; simulated fix + verify; `evaluate.py` table | script fits ≤5 min |
-| T16 | TODO | medium | Fix review bugs B1–B8 below (S4 review). Owner: Sonnet until Codex quota resets | `pytest -q` passes, `evaluate` 16/16, `python scripts/stress_test.py` shows no CRASH and B2–B7 cases diagnosed correctly |
+| T16 | DONE | medium | Fix review bugs B1–B8 below (S4 review). Owner: Sonnet until Codex quota resets | `pytest -q` passes, `evaluate` 16/16, `python scripts/stress_test.py` shows no CRASH and B2–B7 cases diagnosed correctly |
 
 ## Canonical telemetry (input after normalization)
 ```json
@@ -59,3 +59,5 @@ After B1–B8: update README robustness section if behaviour changed, rerun stre
 - S2 cont.: T10, T11 DONE via Codex (reviewed). Codex quota ran out during T12 (resets 5:24 PM); T12 written by Claude: `api/server.py` + `api/static/`, driven in browser (congestion, dns_failure, malformed_json, --fail-agent, simulated fix verified). Fixed T2 bug: null optional metrics were flagged wrong_type (data_quality 0.04 -> 1.0). M2 = T12. Next: T13 (MCP, stretch), T14 README, T15 demo script. Run UI: `uvicorn api.server:app`.
 - S3 (Sonnet): T13 (MCP via `mcp` 2.x `MCPServer`, optional dep `.[mcp]`), T14 README, T15 demo script all DONE, written by Claude (Codex down). 125 tests, evaluate 16/16. Next: record demo video, final repo check/submission.
 - S4 (Opus review): T1–T15 verified (125 tests, evaluate 16/16). Stress test found B1–B8 (see Review bugs). Next: T16 by Sonnet (Codex quota out).
+- S5 (Sonnet): T16 DONE, B1-B8 fixed with regression tests (141 tests, evaluate 16/16, stress test no CRASH), pushed per group.
+  Decisions: B2 = weights rebalanced + multi-domain rule; B5 = "normal" matched on present metrics once coverage >= 0.4.

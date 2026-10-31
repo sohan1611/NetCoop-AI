@@ -46,7 +46,7 @@ Categories: ≥0.75 high, 0.5–0.75 medium, 0.3–0.5 low, below 0.3 → `insuf
 `incident_id`, `status`, `suspected_root_cause`, `confidence`, `affected_devices`, `supporting_evidence`, `alternative_causes`, `recommended_actions`, `evidence_sources`, `limitations`, plus `confidence_category` and `run_id`.
 
 ## Error handling
-Malformed JSON, missing sections, unknown fields, legacy schemas, unit mismatches, a crashed or slow agent, and invalid bus messages all produce a clear `error` / limitation entry rather than an exception. Inject a failure with `--fail-agent infrastructure`.
+Malformed JSON, missing sections, unknown fields, legacy schemas, unit mismatches, a crashed or slow agent, and invalid bus messages all produce a clear `error` / limitation entry rather than an exception. If the correlator or reporter fails the orchestrator still returns a valid degraded `insufficient_evidence` report built from the analysis findings. Numeric strings (`"99.9%"`), CamelCase field names, `{"records": [...]}` wrappers and organizer records without `device_id` are accepted with a data-quality note; impossible values (latency > 60000 ms, counts > 1e9, pct > 100) are flagged out-of-range. Inject a failure with `--fail-agent infrastructure`.
 
 ## Setup
 Requires Python 3.11+ (developed on 3.14).
