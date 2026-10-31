@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   runId: null, health: null, runs: null, report: null, details: null,
   messages: [], topology: null, view: 'console', search: '', acknowledged: readAcknowledged(),
+  running: false, scenariosReady: false,
 };
 let cy = null, source = null;
 const ACK_KEY = 'netcoop.acknowledged';
@@ -25,11 +26,128 @@ function renderSidebar() {
   $('api-host').textContent = 'HOST: ' + (state.health ? location.host : '—');
   $('api-uptime').textContent = 'UP: ' + (Number.isFinite(state.health?.uptime_s) ? state.health.uptime_s + 's' : '—');
 }
-// GROUP 2: replace these placeholder renderers with the hero/pipeline UI.
-function renderHero() { $('app-version').textContent = state.health?.version ? 'v' + state.health.version : '—'; }
+const PIPELINE_AGENTS = [
+  ['normalizer', 'INGESTION'], ['performance', 'PERFORMANCE'],
+  ['infrastructure', 'INFRASTRUCTURE'], ['connectivity', 'TOPOLOGY'], ['correlator', 'RCA'],
+];
+const AGENT_STATUSES = new Set(['pending', 'running', 'complete', 'flagged', 'alert', 'failed', 'abstained', 'synthesizing']);
+function relativeTime(stamp) {
+  const end = Date.parse(stamp);
+  if (!Number.isFinite(end)) return '—';
+  const seconds = Math.max(0, Math.floor((Date.now() - end) / 1000));
+  if (seconds < 60) return seconds + 's ago';
+  if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+  if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+  return Math.floor(seconds / 86400) + 'd ago';
+}
+function renderHero() {
+  const r = state.report, d = state.details;
+  $('app-version').textContent = state.health?.version ? 'v' + state.health.version : '—';
+  $('trigger-run').disabled = state.running || !state.scenariosReady;
+  $('trigger-run').classList.toggle('idle-highlight', !state.runId && !state.running);
+  $('export-toggle').disabled = !r || state.running;
+  $('hero-stats').classList.toggle('is-idle', !state.runId && !state.running);
+  let health = '—', tone = '';
+  if (r?.status === 'diagnosed' && r.cause === 'normal') { health = 'Healthy'; tone = 'complete'; }
+  else if (r?.status === 'error' || (r?.status === 'diagnosed' && r.cause && r.confidence >= 0.75)) {
+    health = 'Critical'; tone = 'alert';
+  } else if (r) { health = 'Degraded'; tone = 'flagged'; }
+  $('mesh-health').textContent = health === '—' ? health : 'Campus Mesh: ' + health;
+  $('mesh-health').className = tone;
+  $('mesh-health-dot').className = 'health-dot ' + tone;
+  // Abstaining agents still produced a finding; unavailable agents did not.
+  const produced = new Set(state.messages.filter((m) => m.type === 'FINDING').map((m) => m.sender));
+  const agents = d?.agents;
+  const count = state.messages.length ? PIPELINE_AGENTS.filter(([name]) => produced.has(name)).length :
+    agents ? agents.filter((a) => a.status !== 'failed' &&
+      (a.name !== 'correlator' || a.top_hypothesis != null)).length : null;
+  $('swarm-status').textContent = count === null ? '—' : `Swarm Status: ${count} Active Diagnostic Agents`;
+  $('swarm-status').className = count === null ? '' : 'complete';
+  $('swarm-status-dot').className = 'health-dot' + (count === null ? '' : ' complete');
+  const since = relativeTime(d?.finished_at);
+  $('coordination-cycle').textContent = since === '—' ? '—' : 'Last Coordinated Sweep: ' + since;
+  $('query-rounds').textContent = Number.isFinite(d?.rounds) ? d.rounds + ' query rounds' : '—';
+  $('active-incident').textContent = r?.incident_id ? 'Active Incident: ' + r.incident_id : '—';
+  const severity = $('incident-severity');
+  severity.hidden = !r;
+  const high = r?.status === 'diagnosed' && r.cause && r.cause !== 'normal' && r.confidence >= 0.75;
+  const medium = r?.confidence_category === 'medium';
+  const low = ['low', 'insufficient'].includes(r?.confidence_category);
+  severity.textContent = high ? 'P1 CRIT' : medium ? 'P2' : low ? 'P3' : '—';
+  severity.className = 'pill ' + (high ? 'alert' : medium ? 'flagged' : '');
+}
+// SSE is the live source; /details replaces these projections after the run ends.
+function liveAgent(name) {
+  const view = { name, status: 'pending', summary: '', stats: {} };
+  for (const msg of state.messages) {
+    const p = msg.payload || {};
+    if ((msg.type === 'TASK' && msg.recipient === name) ||
+        (msg.type === 'QUERY' && (msg.recipient === name || p.target_agent === name))) view.status = 'running';
+    if (name === 'correlator' && ((msg.type === 'QUERY' && msg.sender === name) ||
+        (msg.type === 'RESPONSE' && msg.recipient === name))) view.status = 'synthesizing';
+    if (msg.sender !== name) continue;
+    if (msg.type === 'ERROR') { view.status = 'failed'; view.summary = p.message || ''; continue; }
+    if (msg.type === 'RESPONSE' && name !== 'correlator') {
+      view.status = view.findingStatus || 'complete'; continue;
+    }
+    if (msg.type !== 'FINDING') continue;
+    if (name === 'normalizer') {
+      view.status = Number.isFinite(p.data_quality?.score) && p.data_quality.score < 0.5 ? 'flagged' : 'complete';
+      view.summary = p.formats?.length ? 'Normalized ' + p.formats.join(', ') + ' telemetry' : '';
+      if (Number.isFinite(p.data_quality?.score)) view.summary += '; data quality ' + Math.round(p.data_quality.score * 100) + '%';
+      view.stats = { Ingested: Array.isArray(p.telemetry?.samples) ? p.telemetry.samples.length + ' samples' : '—',
+        Mapped: Array.isArray(p.mappings) ? p.mappings.length + ' fields' : '—' };
+    } else if (name === 'correlator') {
+      const diagnosis = p.diagnosis || {};
+      view.status = diagnosis.cause && diagnosis.cause !== 'normal' ?
+        diagnosis.status === 'diagnosed' && diagnosis.confidence >= 0.75 ? 'alert' : 'flagged' : 'complete';
+      view.summary = diagnosis.cause ? 'Top hypothesis: ' + diagnosis.cause : '';
+      view.stats = { Confidence: Number.isFinite(diagnosis.confidence) ? Math.round(diagnosis.confidence * 100) + '%' : '—',
+        Conflicts: Array.isArray(diagnosis.conflicts) ? diagnosis.conflicts.length : '—' };
+    } else {
+      const top = [...(p.hypotheses || [])].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
+      // Critical classifications without an explicit SSE severity arrive via /details.
+      const critical = p.evidence?.some((e) => e.severity === 'critical' || /(?:>=|<=) critical\b/.test(e.interpretation || ''));
+      view.status = !top ? 'abstained' : top.cause === 'normal' ? 'complete' : critical ? 'alert' : 'flagged';
+      view.summary = [top?.cause ? 'Top hypothesis: ' + top.cause +
+        (Number.isFinite(top.score) ? ' (' + Math.round(top.score * 100) + '%)' : '') : '', ...(p.notes || []).slice(0, 1)].filter(Boolean).join('. ');
+      view.stats = { Evidence: Array.isArray(p.evidence) ? p.evidence.length : '—',
+        Flagged: Array.isArray(p.affected_devices) ? p.affected_devices.length + ' devices' : '—' };
+    }
+    view.findingStatus = view.status;
+  }
+  return view;
+}
 function renderPipeline() {
-  $('pipeline-empty').textContent = state.messages.length ? 'Agent messages are available in the timeline below.' :
-    state.runId ? 'Waiting for agent messages…' : 'No run yet.';
+  const agreement = state.details?.consensus;
+  $('pipeline-consensus').textContent = agreement && typeof agreement.synchronized === 'boolean' ?
+    `${agreement.synchronized ? 'SYNCHRONIZED' : 'DIVERGENT'} (${agreement.engaged ?? '—'}/${agreement.total ?? '—'} AGENTS ENGAGED)` : '—';
+  $('pipeline-consensus').className = agreement ? agreement.synchronized ? 'synchronized' : 'divergent' : '';
+  const grid = $('pipeline-agents');
+  grid.classList.toggle('is-idle', !state.runId && !state.running);
+  grid.replaceChildren();
+  PIPELINE_AGENTS.forEach(([name, category], i) => {
+    const agent = state.details?.agents?.find((a) => a.name === name) || liveAgent(name);
+    const status = AGENT_STATUSES.has(agent.status) ? agent.status : 'pending';
+    const card = el('article', undefined, 'agent-card ' + status);
+    card.id = 'agent-' + name;
+    const header = el('div', undefined, 'agent-heading');
+    header.append(el('span', '// AGENT-' + String(i + 1).padStart(2, '0') + ':', 'mono agent-index'),
+      el('span', status[0].toUpperCase() + status.slice(1), 'pill ' + status));
+    const title = el('h3', name[0].toUpperCase() + name.slice(1) + ' Agent');
+    const summary = el('p', agent.summary || '—', 'agent-summary');
+    summary.title = agent.summary || '';
+    const footer = el('div', undefined, 'agent-stats mono');
+    const stats = Object.entries(agent.stats || {}).slice(0, 2);
+    for (let j = 0; j < 2; j++) {
+      const stat = el('span');
+      if (stats[j]) stat.append(el('span', stats[j][0] + ': ', 'muted'), el('strong', stats[j][1] ?? '—'));
+      else stat.textContent = '—';
+      footer.append(stat);
+    }
+    card.append(header, el('p', category, 'agent-category mono'), title, summary, footer);
+    grid.append(card);
+  });
 }
 function renderViews() {
   $('main').dataset.view = state.view;
@@ -81,6 +199,7 @@ async function init() {
     const o = el('option', s.name + '  (' + s.expected + ')'); o.value = s.name; $('scenario').append(o);
   });
   $('scenario').value = 'congestion';
+  state.scenariosReady = true; renderHero();
 }
 
 // Single data-loading/subscription layer: all endpoint calls stay in these helpers.
@@ -109,10 +228,10 @@ function subscribeRun() {
     source.close();
     try { await loadRunData(); $('status').textContent = 'Run ' + state.runId + ' complete'; }
     catch (err) { $('status').textContent = 'Error: ' + err.message; }
-    $('run').disabled = false;
+    state.running = false; $('run').disabled = false; renderShell();
   });
   source.onerror = () => {
-    source.close(); $('run').disabled = false;
+    source.close(); state.running = false; $('run').disabled = false; renderShell();
     $('status').textContent = 'Stream disconnected. Start a new run to retry.';
   };
 }
@@ -130,7 +249,7 @@ function summarize(msg) {
 }
 function addMessage(msg) {
   state.messages.push(msg);
-  renderPipeline(); renderTimeline(msg);
+  renderHero(); renderPipeline(); renderTimeline(msg);
 }
 function renderTimeline(msg) {
   const tl = $('timeline');
@@ -188,6 +307,9 @@ function renderReport() {
 }
 
 async function run() {
+  if (state.running) return;
+  state.running = true;
+  closeExportMenu();
   $('run').disabled = true; $('status').textContent = 'Starting…'; $('report').hidden = true;
   state.runId = null; state.report = null; state.details = null; state.topology = null; state.messages = [];
   if (cy) { cy.destroy(); cy = null; }
@@ -199,16 +321,56 @@ async function run() {
     const body = { fail_agent: $('fail').value || null };
     const f = $('file').files[0];
     if (f) body.upload_id = (await json('/api/upload', { method: 'POST', body: await f.text() })).upload_id;
-    else body.scenario = $('scenario').value;
+    else body.scenario = $('scenario').value || 'congestion';
     state.runId = (await json('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body) })).run_id;
     $('status').textContent = 'Run ' + state.runId;
     renderShell(); subscribeRun();
   } catch (err) {
-    $('status').textContent = 'Error: ' + err.message; $('run').disabled = false;
+    $('status').textContent = 'Error: ' + err.message;
+    state.running = false; $('run').disabled = false; renderShell();
   }
 }
 
+function closeExportMenu() {
+  $('export-menu').hidden = true;
+  $('export-toggle').setAttribute('aria-expanded', 'false');
+}
+// Export transport belongs to the same data-loading layer as run/report fetching.
+async function downloadReport(format) {
+  if (!state.report || !state.runId || state.running) return;
+  if (format === 'pdf') { window.print(); return; }
+  const runId = state.runId;
+  const url = `/api/runs/${runId}/report` + (format === 'md' ? '.md' : '');
+  let blob;
+  if (format === 'json') blob = new Blob([JSON.stringify(await json(url), null, 2)], { type: 'application/json' });
+  else {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(response.statusText);
+    blob = await response.blob();
+  }
+  const link = el('a');
+  link.href = URL.createObjectURL(blob); link.download = 'netcoop-' + runId + '.' + format;
+  document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+$('trigger-run').onclick = run;
+$('export-toggle').onclick = () => {
+  const open = $('export-menu').hidden;
+  $('export-menu').hidden = !open;
+  $('export-toggle').setAttribute('aria-expanded', String(open));
+  if (open) $('export-menu').querySelector('button').focus();
+};
+document.querySelectorAll('[data-export]').forEach((button) => {
+  button.onclick = async () => {
+    closeExportMenu(); $('export-toggle').focus();
+    try { await downloadReport(button.dataset.export); }
+    catch (err) { $('status').textContent = 'Export error: ' + err.message; }
+  };
+});
+document.addEventListener('click', (event) => { if (!event.target.closest('.export-control')) closeExportMenu(); });
+// Keep relative sweep time current without refetching the finished run.
+setInterval(() => { if (state.details?.finished_at) renderHero(); }, 1000);
 $('run').onclick = run;
 $('fix').onclick = async () => {
   $('fix').disabled = true;
@@ -232,6 +394,7 @@ $('sidebar-toggle').onclick = () => {
   $('sidebar-toggle').setAttribute('aria-expanded', String(open));
 };
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !$('export-menu').hidden) { closeExportMenu(); $('export-toggle').focus(); }
   if (event.key === 'Escape') { $('sidebar').classList.remove('open'); $('sidebar-toggle').setAttribute('aria-expanded', 'false'); }
 });
 $('spawn-run').onclick = () => {

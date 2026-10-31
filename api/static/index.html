@@ -23,6 +23,7 @@
   <symbol id="icon-mesh" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 3h7v7M3 14v7h7M14 7h-4m-3 3v4m3 3h4m3-7v4"/></symbol>
   <symbol id="icon-workflow" viewBox="0 0 24 24"><path d="M3 7h5l8 10h5M3 17h5l8-10h5m-3-3 3 3-3 3m0 4 3 3-3 3"/></symbol>
   <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="icon-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
 </svg>
 <header id="top-bar" class="top-bar">
   <button id="sidebar-toggle" class="icon-button hamburger" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false"><svg class="icon"><use href="#icon-menu"/></svg></button>
@@ -66,9 +67,36 @@
 </aside>
 <main id="main" data-view="console">
   <div id="view-console" class="view" data-view-panel="console">
-    <!-- GROUP 2: hero and pipeline renderers extend these stable containers. -->
-    <section id="hero" class="card hero-placeholder"><p class="eyebrow mono">NETCOOP AI ROOT-CAUSE ENGINE <span>// ORCHESTRATOR CLUSTER</span></p><h1>NetCoop AI // Autonomous NOC Swarm <span id="app-version">—</span></h1><p class="muted">Multi-agent network fault diagnosis</p></section>
-    <section id="pipeline" class="card section-placeholder"><h2>Autonomous Multi-Agent Coordination Pipeline</h2><p id="pipeline-empty" class="muted">No run yet.</p></section>
+    <section id="hero" class="card hero-card" aria-labelledby="hero-title">
+      <div class="hero-top">
+        <div class="hero-intro">
+          <div class="hero-chips mono"><span>NETCOOP AI ROOT-CAUSE ENGINE</span><span>// ORCHESTRATOR CLUSTER</span></div>
+          <h1 id="hero-title">NetCoop AI // Autonomous NOC Swarm <span id="app-version">—</span></h1>
+          <p class="muted">Live multi-agent fault correlation and localized network diagnosis.</p>
+        </div>
+        <div class="hero-actions">
+          <button id="trigger-run" class="button primary" disabled><svg class="icon"><use href="#icon-bot"/></svg>Trigger Swarm Diagnostic Run</button>
+          <div class="export-control">
+            <button id="export-toggle" class="button outline" aria-expanded="false" aria-controls="export-menu" disabled><svg class="icon"><use href="#icon-download"/></svg>Export Root-Cause Report (JSON/PDF)</button>
+            <div id="export-menu" class="export-menu" hidden>
+              <button data-export="json">Download JSON</button>
+              <button data-export="md">Download Markdown</button>
+              <button data-export="pdf">Print / Save PDF</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="hero-stats" class="hero-stats is-idle">
+        <div class="hero-stat"><span class="stat-label mono">CAMPUS MESH HEALTH</span><div class="stat-line"><strong id="mesh-health">—</strong><span id="mesh-health-dot" class="health-dot" aria-hidden="true"></span></div></div>
+        <div class="hero-stat"><span class="stat-label mono">AGENT STATUS</span><div class="stat-line"><strong id="swarm-status">—</strong><span id="swarm-status-dot" class="health-dot" aria-hidden="true"></span></div></div>
+        <div class="hero-stat"><span class="stat-label mono">COORDINATION CYCLE</span><strong id="coordination-cycle">—</strong><span id="query-rounds" class="stat-detail mono">—</span></div>
+        <div class="hero-stat"><span class="stat-label mono">CORRELATED ANOMALY</span><div class="stat-line"><strong id="active-incident">—</strong><span id="incident-severity" class="pill" hidden></span></div></div>
+      </div>
+    </section>
+    <section id="pipeline" class="card pipeline-card" aria-labelledby="pipeline-title">
+      <header class="pipeline-heading"><h2 id="pipeline-title"><svg class="icon"><use href="#icon-network"/></svg>Autonomous Multi-Agent Coordination Pipeline</h2><p class="mono">PIPELINE CONSENSUS: <strong id="pipeline-consensus">—</strong></p></header>
+      <div id="pipeline-agents" class="pipeline-agents is-idle"></div>
+    </section>
     <div id="report-layout" class="report-layout">
       <div id="report-column" class="report-column">
         <!-- Legacy workflow remains reachable until Groups 2–5 replace it. -->
