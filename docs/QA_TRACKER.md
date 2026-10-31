@@ -177,3 +177,5 @@ Supplied pack: 5 fixtures `tests/fixtures/final_qa/FQA*.json` + `tests/test_fina
 Vercel static = T29 (upload notice, "Normal with warnings", RUN ID). Render API = T29: fixtures 14/13 via Vercel → insufficient_evidence 0.299 / 0.203 (identical to local). Two cookie jars through the Vercel rewrite: session B gets `[]` and 404 on report/stream/details/report.md of A's run; both sources → 422. Browser on netcoop-ai.vercel.app: congestion 0.942, SSE 12 messages through Vercel, hero Critical / P1 CRIT, no console errors. Found NC-046 (cookie not Secure).
 
 S18 live re-check (87c0674, Render redeployed in ~90 s): /api/health shows per-session/per-IP quotas + max_stored_runs; via Vercel R3-02 → latency_degradation 0.97, R3-03 → 0.95 with "historical:" note, R3-08 → insufficient_evidence 0.299 (identical to local); Vercel app.js has the Recovered state.
+
+S19 live re-check (e180e7a, live within ~60 s): via Vercel dns_failure → severity critical, affected [DNS_SRV_01], 0.931; FQA02 → latency_degradation, affected [AP-A]; Vercel app.js has "Diagnosis confidence".
