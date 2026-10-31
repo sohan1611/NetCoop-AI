@@ -8,7 +8,12 @@ TMP = tempfile.mkdtemp()
 def run(raw, fail=None):
     try:
         res = asyncio.run(build_orchestrator(TMP, fail_agents=fail).run(raw if isinstance(raw, str) else json.dumps(raw)))
-        rep = _report(res); return _cause(res, rep), rep
+        rep = _report(res)
+        if not isinstance(res, dict):  # B9 invariant: alternatives strictly below the chosen confidence
+            d = res.findings['correlator']['diagnosis']
+            if any(a['confidence'] >= d['confidence'] for a in d['alternatives']):
+                return 'CRASH:INVARIANT alternative >= confidence', rep
+        return _cause(res, rep), rep
     except Exception as e:
         return 'CRASH:' + type(e).__name__ + ':' + str(e)[:120], None
 exp = {'normal': 'normal', 'latency_spike': 'latency_degradation', 'hardware_failure': 'hardware_failure'}

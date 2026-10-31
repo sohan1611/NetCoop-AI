@@ -374,6 +374,20 @@ def analyze_connectivity(
                 ),
             ))
 
+    services = telemetry.get("services") if isinstance(telemetry, dict) else None
+    if not graph and not (isinstance(services, list) and services):
+        # Nothing to reason about topologically or by service: abstain rather than
+        # vote from per-device metrics the other agents already cover.
+        notes.append("no topology/services supplied; connectivity abstains")
+        return Finding(
+            agent="connectivity",
+            hypotheses=[],
+            affected_devices=[],
+            evidence=[],
+            data_quality=_quality(data_quality),
+            notes=notes,
+        )
+
     service_scores = _analyze_services(telemetry, evidence, notes, affected)
     cause_scores = {**topology_signals, **service_scores}
     strongest = max(cause_scores.values(), default=0.0)

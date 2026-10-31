@@ -219,6 +219,14 @@ def _rows_for_metric(
     ]
 
 
+def _device_down(telemetry: dict[str, Any]) -> bool:
+    devices = telemetry.get("devices")
+    return isinstance(devices, list) and any(
+        isinstance(row, dict) and str(row.get("status", "")).lower() == "down"
+        for row in devices
+    )
+
+
 def _observe_metric(
     telemetry: dict[str, Any],
     metric: str,
@@ -279,9 +287,16 @@ def _agent_tops(findings: dict[str, dict[str, Any]]) -> dict[str, str]:
 def _agreement_factor(cause: str, tops: dict[str, str]) -> float:
     if not tops:
         return AGREEMENT_FACTOR_MIN
-    agreeing = sum(top == cause for top in tops.values())
+    # Votes are weighted by each agent's domain relevance to the cause, so a
+    # low-relevance dissent costs less than a specialist's.
+    relevance = AGENT_RELEVANCE.get(cause, {})
+    weights = {agent: relevance.get(agent, 0.5) for agent in tops}
+    total = sum(weights.values())
+    if total <= 0:
+        return AGREEMENT_FACTOR_MIN
+    agreeing = sum(weights[agent] for agent, top in tops.items() if top == cause)
     span = AGREEMENT_FACTOR_MAX - AGREEMENT_FACTOR_MIN
-    return AGREEMENT_FACTOR_MIN + span * agreeing / len(tops)
+    return AGREEMENT_FACTOR_MIN + span * agreeing / total
 
 
 def _agent_support(
@@ -305,6 +320,7 @@ def _candidate(
     dq_factor: float,
     quality_issues: list[str],
     tops: dict[str, str],
+    device_down: bool = False,
 ) -> _Candidate:
     signature = SIGNATURES[cause]
     critical_status = any("severity critical" in issue for issue in quality_issues)
@@ -327,7 +343,19 @@ def _candidate(
     total_weight = sum(weight for _, weight in signature)
     if cause == "normal" and len(observations) / len(signature) >= MIN_SIGNATURE_COVERAGE:
         total_weight = sum(weight for metric, weight in signature if metric in observations)
+    # A device reported down is decisive for hardware_failure: the metrics a dead
+    # device cannot report are not evidence against it.
+    if (cause == "hardware_failure" and device_down
+            and len(observations) / len(signature) >= MIN_SIGNATURE_COVERAGE):
+        total_weight = sum(weight for metric, weight in signature if metric in observations)
     match = _clamp(weighted_match / total_weight) if total_weight else 0.0
+    if cause == "normal" and (device_down or critical_status or any(
+        (bad := _observe_metric(telemetry, metric, normal=False,
+                                critical_status=critical_status)) is not None
+        and bad.grade >= 1.0
+        for metric, _ in signature
+    )):
+        match = 0.0  # normal is ineligible while any device is down or any metric is critical
     coverage = len(observations) / len(signature) if signature else 0.0
     agreement = _agreement_factor(cause, tops)
     confidence = _clamp(
@@ -338,6 +366,8 @@ def _candidate(
         confidence * (1.0 - AGENT_SUPPORT_RANK_WEIGHT)
         + support * AGENT_SUPPORT_RANK_WEIGHT
     )
+    if cause == "normal" and match == 0.0 and observations:
+        rank = 0.0
     return _Candidate(
         cause=cause,
         match=match,
@@ -356,7 +386,7 @@ def _grade(candidate: _Candidate, metric: str) -> float:
 
 
 def _select_winner(
-    candidates: list[_Candidate], quality_issues: list[str]
+    candidates: list[_Candidate], quality_issues: list[str], device_down: bool = False
 ) -> tuple[_Candidate, str | None]:
     by_cause = {candidate.cause: candidate for candidate in candidates}
     for service in ("dns", "dhcp"):
@@ -372,6 +402,12 @@ def _select_winner(
             )
 
     hardware = by_cause["hardware_failure"]
+    if device_down:
+        interface = by_cause["interface_fault"]
+        errors = _grade(interface, "interface_errors")
+        if errors >= 0.5 and errors > _grade(hardware, "cpu_pct"):
+            return interface, "a device is down and interface errors dominate"
+        return hardware, "a device reported down"
     critical = any("severity critical" in issue for issue in quality_issues)
     if critical and max(
         _grade(hardware, "cpu_pct"), _grade(hardware, "interface_errors")
@@ -417,6 +453,7 @@ def _conflict_messages(
 def _score(context: _RunContext) -> _ScoreResult:
     dq_factor, quality_issues, _ = _quality_details(context.findings)
     tops = _agent_tops(context.findings)
+    device_down = _device_down(context.telemetry)
     candidates = [
         _candidate(
             cause,
@@ -425,10 +462,11 @@ def _score(context: _RunContext) -> _ScoreResult:
             dq_factor,
             quality_issues,
             tops,
+            device_down,
         )
         for cause in SIGNATURES
     ]
-    winner, resolution = _select_winner(candidates, quality_issues)
+    winner, resolution = _select_winner(candidates, quality_issues, device_down)
     remaining = sorted(
         (candidate for candidate in candidates if candidate is not winner),
         key=lambda candidate: (-candidate.rank, candidate.cause),
@@ -439,6 +477,14 @@ def _score(context: _RunContext) -> _ScoreResult:
     conflicts = _conflict_messages(tops, winner, runner)
     if resolution is not None:
         conflicts.append(f"Conflict resolved by domain rule: {resolution}")
+    higher = [item for item in remaining if item.confidence >= winner.confidence > 0.0]
+    if higher:
+        raw = ", ".join(f"{item.cause}={item.confidence:.3f}" for item in higher)
+        how = "domain rule" if resolution is not None else "agent-weighted rank"
+        conflicts.append(
+            f"selected by {how} over higher raw score: {winner.cause}="
+            f"{winner.confidence:.3f} vs {raw}"
+        )
     unresolved = (
         resolution is None
         and runner is not None
@@ -785,8 +831,8 @@ class CorrelatorAgent(Agent):
                 "confidence": round(candidate.confidence, 6),
             }
             for candidate in result.ordered[1:]
-            if abs(winner.confidence - candidate.confidence)
-            <= ALTERNATIVE_CONFIDENCE_WINDOW
+            if candidate.confidence < confidence
+            and confidence - candidate.confidence <= ALTERNATIVE_CONFIDENCE_WINDOW
         ]
         _, _, quality_payload = _quality_details(context.findings)
         finding = Finding(
