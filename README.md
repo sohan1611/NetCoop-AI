@@ -92,7 +92,7 @@ Open http://127.0.0.1:8000 (or the live link above). Everything on the page come
 pytest -q
 python scripts/evaluate.py
 ```
-`evaluate` runs every labelled scenario and prints expected vs. got, confidence and pass/fail. Current results: **198 tests pass**, **evaluate 16/16**. `python scripts/stress_test.py` and `python scripts/hostile_inputs.py` throw malformed, hostile and oversized inputs at the pipeline and report any crash (none today).
+`evaluate` runs every labelled scenario and prints expected vs. got, confidence and pass/fail. Current results: **198 tests pass** with `pip install -e ".[dev,mcp]"` (with only `.[dev]` the MCP tests are skipped), **evaluate 16/16**. `python scripts/stress_test.py` and `python scripts/hostile_inputs.py` throw malformed, hostile and oversized inputs at the pipeline and report any crash (none today).
 
 ## Submission checklist (problem statement §7)
 | Deliverable | Where |

@@ -1,16 +1,22 @@
-# Demo script (target 4:30, hard limit 5:00)
-Setup before recording: `uvicorn api.server:app`, browser at http://127.0.0.1:8000, a terminal in the repo with the venv active, `runs/` cleared.
+# Demo script (target 4:30, hard limit 4:45)
+**Before recording**
+- Local (recommended, no cold start): `uvicorn api.server:app`, browser at http://127.0.0.1:8000, 1280×800 window, zoom 100 %.
+- Live alternative: open https://netcoop-ai.vercel.app/api/health 2 minutes before you start (wakes the Render backend, ~50 s from cold) and reload the console once you see `"status"`.
+- Terminal in the repo with the venv active; README open in a second tab. Close other tabs and notifications.
+- Each run takes about 1 s locally (`org_hardware_failure` about 4 s), so no waiting is scripted.
 
-| Time | Screen | Say / do |
-|---|---|---|
-| 0:00–0:25 | README title + mermaid diagram | "Campus faults show up as overlapping symptoms in messy telemetry. NetCoop AI uses six agents that talk over a documented JSON protocol and produce one evidence-based report. Everything runs offline; the LLM is optional." |
-| 0:25–1:30 | Dashboard: pick `congestion`, Run | Watch the live timeline: normalizer TASK → performance / infrastructure / connectivity FINDINGs in parallel. Point at a QUERY → RESPONSE pair: "confidence was below threshold, so the correlator asked an agent for more data (max 2 rounds)." |
-| 1:30–2:15 | Report card + topology | Root cause, confidence (~0.87, high), affected devices highlighted in the graph, supporting evidence with metric/value/threshold, alternative causes, actions, limitations. "Evidence traces back to the agent that produced it." |
-| 2:15–3:00 | Dashboard: run `interop_renamed_fields_units`, then `malformed_json` | Renamed fields and unit mismatches are normalised with a data-quality score; malformed input returns a clear error, no crash. Optionally `org_latency_spike` to show the organizer's format is accepted. |
-| 3:00–3:30 | Dashboard: `dns_failure` with fail-agent `infrastructure` (or CLI: `python -m netcoop diagnose data/scenarios/congestion.json --no-llm --fail-agent infrastructure`) | "One agent is killed; the run still finishes, lowers confidence and records the limitation." |
-| 3:30–4:00 | Report card → "Approve simulated fix" | Simulated remediation patches the telemetry, re-diagnoses, shows before → after and `verified: true`. "Nothing touches real infrastructure." |
-| 4:00–4:20 | `insufficient_data` run | "When evidence is thin it says insufficient evidence instead of guessing." |
-| 4:20–4:50 | Terminal: `python -m netcoop evaluate --no-llm` then `python -m pytest -q` | Show the 16/16 table and passing tests. "Rules, thresholds and the confidence formula are in the README." |
-| 4:50–5:00 | README setup block | "Clone, `pip install -e .`, run. Thanks." |
+| Time | Screen | Do | Say |
+|---|---|---|---|
+| 0:00–0:20 | README: title + mermaid diagram | Scroll slowly over the diagram. | "Campus faults show up as overlapping symptoms in messy telemetry. NetCoop AI is a swarm of six agents that talk over a documented JSON protocol and agree on one evidence-based report. It runs fully offline; the LLM is optional." |
+| 0:20–1:00 | Console, idle | Click **Trigger Swarm Diagnostic Run** (congestion). Point at the pipeline pills and the Agent Inter-Communication Bus as they fill. | "The normalizer cleans the input, then performance, infrastructure and connectivity analyse it in parallel. Every message on the bus is a validated envelope: task, finding, query, response. The correlator weighs their findings." |
+| 1:00–1:50 | Same run: report | Scroll the report: root cause, Limitations (open it), affected device, evidence tiles, telemetry table, hypothesis bars, actions. | "Congestion at 94 %, high confidence, on the core router. Each evidence tile shows the value, its baseline and the device it came from, and the table maps raw fields to normalized metrics. The connectivity agent preferred latency degradation; the correlator set that aside and says why in the limitations, instead of hiding the disagreement." |
+| 1:50–2:10 | Topology tab | Click **Topology**, click the core router node. | "The topology view marks affected and upstream devices; clicking a node shows its metrics." |
+| 2:10–2:55 | Spawn Agent Run modal | Run `interop_renamed_fields_units`; point at the **Format Normalization** chip. Then run `malformed_json`. | "Interoperability: this file renames fields and uses different units. The normalizer maps and converts them and still finds congestion. It also accepts legacy schemas and the organizers' own format. Broken JSON is rejected with a clear reason, not a crash." |
+| 2:55–3:25 | Modal | Run `dns_failure` with fault injection **infrastructure**. Open Limitations. | "Now I kill the infrastructure agent mid-run. The orchestrator times it out, records the limitation and the remaining agents still pin the DNS failure." |
+| 3:25–3:45 | Modal | Run `insufficient_data`. | "When the evidence is thin it says insufficient evidence, 6 %, instead of guessing." |
+| 3:45–4:10 | Incidents tab → congestion row → actions | Click the congestion incident, scroll to actions, **Apply Simulated Remediation** → confirm. | "Playbook actions are simulated on a copy of the telemetry, then the swarm re-diagnoses: congestion to normal, verified. Nothing touches real infrastructure." |
+| 4:10–4:20 | Export menu | **Export Root-Cause Report** → **Print / Save PDF**, show the preview, cancel. | "The report exports as JSON, Markdown or a clean PDF." |
+| 4:20–4:40 | Terminal | `python -m netcoop evaluate --no-llm` (then `python -m pytest -q` if time allows). | "Sixteen labelled scenarios, sixteen correct, and 198 tests. Setup, protocol and the confidence formula are in the README. Thanks." |
 
-Cut list if over time: skip `org_latency_spike`, shorten the pytest run, drop the insufficient_data run to a single sentence.
+**Cut list if over time:** skip the Topology node click, drop `malformed_json` to a sentence, skip pytest (keep `evaluate`).
+**Optional extra (only if under 4:15):** run `org_hardware_failure` to show the organizer format: "2 formats reconciled", hardware failure on SW_CAMPUS_2.
