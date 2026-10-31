@@ -152,6 +152,11 @@ TOP_LEVEL_FIELDS = {
 }
 
 
+# Size caps (V1). Set above the 20k-record hostile probe, which must still diagnose.
+MAX_DEVICES = 25_000
+MAX_SAMPLES = 50_000
+
+
 class NormalizeResult(BaseModel):
     """A no-throw normalization outcome."""
 
@@ -673,6 +678,10 @@ def normalize(raw: str | bytes | dict | list, use_llm: bool = False) -> Normaliz
                 telemetry = _normalize_canonical(source, tracker)
             else:
                 return _error_result(f"unknown schema_version: {version}", tracker)
+        for section, limit in (("devices", MAX_DEVICES), ("samples", MAX_SAMPLES)):
+            if len(telemetry[section]) > limit:
+                return _error_result(
+                    f"input too large: {len(telemetry[section])} {section} (max {limit})", tracker)
         _validate_rows(telemetry, tracker)
         return NormalizeResult(telemetry=telemetry, data_quality=tracker.model())
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:

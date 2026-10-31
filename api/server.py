@@ -3,6 +3,9 @@ import asyncio
 import json
 import os
 import re
+import shutil
+import time
+from collections import deque
 from pathlib import Path
 from uuid import uuid4
 
@@ -19,6 +22,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SCENARIOS = ROOT / 'data' / 'scenarios'
 STATIC = Path(__file__).resolve().parent / 'static'
 _ID = re.compile(r'^[A-Za-z0-9_.-]+$')
+MAX_UPLOAD_BYTES = 5_000_000
+MAX_CONCURRENT_RUNS = 2
+RATE_LIMIT = 10  # runs per client IP per RATE_WINDOW_S
+RATE_WINDOW_S = 60
 
 
 class RunRequest(BaseModel):
@@ -31,6 +38,9 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
     runs = Path(runs_dir or os.getenv('NETCOOP_RUNS_DIR', 'runs'))
     app = FastAPI(title='NetCoop AI')
     tasks: dict[str, asyncio.Task] = {}
+    finished_at: dict[str, float] = {}
+    hit_log: dict[str, deque] = {}
+    active = [0]
 
     def safe(value: str) -> str:
         if not _ID.match(value) or value.startswith('.'):
@@ -48,12 +58,60 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
         if task is not None:
             await task
 
+    def run_sync(raw: str, run_id: str, fail: set[str]):
+        # Own event loop in a worker thread: agents do sync CPU work that would
+        # otherwise freeze the API loop (and every SSE stream with it).
+        return asyncio.run(build_orchestrator(runs, fail, no_llm=True).run(raw, run_id=run_id))
+
+    def admit(request: Request) -> None:
+        """Per-IP rate limit, then global concurrency gate; raises 429. Caller must release()."""
+        now = time.monotonic()
+        hits = hit_log.setdefault(request.client.host if request.client else '?', deque())
+        while hits and now - hits[0] > RATE_WINDOW_S:
+            hits.popleft()
+        if len(hits) >= RATE_LIMIT:
+            raise HTTPException(429, 'too many runs; retry in a minute')
+        if active[0] >= MAX_CONCURRENT_RUNS:
+            raise HTTPException(429, 'server busy; retry shortly')
+        hits.append(now)
+        active[0] += 1
+
+    def release() -> None:
+        active[0] -= 1
+
+    def cleanup() -> None:
+        """Drop run/upload dirs and finished task records older than the TTL."""
+        ttl = float(os.getenv('NETCOOP_RUN_TTL_S', '3600'))
+        cutoff = time.time() - ttl
+        for run_id in [r for r, t in finished_at.items() if t < time.monotonic() - ttl]:
+            finished_at.pop(run_id, None)
+            tasks.pop(run_id, None)
+        if not runs.is_dir():
+            return
+        for parent in (runs, runs / 'uploads'):
+            if not parent.is_dir():
+                continue
+            for entry in parent.iterdir():
+                if entry.name == 'uploads' and parent == runs:
+                    continue
+                task = tasks.get(entry.name)
+                if task is not None and not task.done():
+                    continue
+                try:
+                    if entry.stat().st_mtime < cutoff:
+                        shutil.rmtree(entry) if entry.is_dir() else entry.unlink()
+                except OSError:
+                    pass
+
     async def execute(raw: str, run_id: str, fail: set[str]) -> None:
         try:
-            await build_orchestrator(runs, fail, no_llm=True).run(raw, run_id=run_id)
+            await asyncio.to_thread(run_sync, raw, run_id, fail)
         except Exception as exc:  # never leave a stream hanging
             (runs / run_id).mkdir(parents=True, exist_ok=True)
             (runs / run_id / 'fatal.txt').write_text(str(exc), encoding='utf-8')
+        finally:
+            finished_at[run_id] = time.monotonic()
+            release()
 
     @app.get('/api/scenarios')
     def list_scenarios() -> list[dict]:
@@ -69,11 +127,19 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
 
     @app.post('/api/upload')
     async def upload(request: Request) -> dict:
-        body = await request.body()
+        declared = request.headers.get('content-length', '')
+        if declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, 'upload too large')
+        chunks: list[bytes] = []
+        size = 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > MAX_UPLOAD_BYTES:
+                raise HTTPException(413, 'upload too large')
+            chunks.append(chunk)
+        body = b''.join(chunks)
         if not body.strip():
             raise HTTPException(400, 'empty upload')
-        if len(body) > 5_000_000:
-            raise HTTPException(413, 'upload too large')
         upload_id = uuid4().hex
         folder = runs / 'uploads'
         folder.mkdir(parents=True, exist_ok=True)
@@ -81,7 +147,7 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
         return {'upload_id': upload_id}
 
     @app.post('/api/run')
-    async def start_run(req: RunRequest) -> dict:
+    async def start_run(req: RunRequest, request: Request) -> dict:
         if req.scenario:
             path = SCENARIOS / f'{safe(req.scenario)}.json'
         elif req.upload_id:
@@ -93,6 +159,8 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
         raw = path.read_text(encoding='utf-8', errors='replace')
         run_id = uuid4().hex[:12]
         fail = {safe(req.fail_agent)} if req.fail_agent else set()
+        cleanup()
+        admit(request)
         tasks[run_id] = asyncio.create_task(execute(raw, run_id, fail))
         return {'run_id': run_id}
 
@@ -161,9 +229,16 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
         return {'nodes': topo.get('nodes', []), 'links': topo.get('links', []), 'affected': affected}
 
     @app.post('/api/runs/{run_id}/remediate')
-    async def remediate(run_id: str) -> dict:
+    async def remediate(run_id: str, request: Request) -> dict:
         directory = run_dir(run_id)
         await finished(run_id)
+        admit(request)
+        try:
+            return await _remediate(directory)
+        finally:
+            release()
+
+    async def _remediate(directory: Path) -> dict:
         try:
             state = RunState.model_validate_json((directory / 'state.json').read_text(encoding='utf-8'))
             before = _cause(state, _report(state))
@@ -173,7 +248,7 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
         except (OSError, ValueError, KeyError) as exc:
             raise HTTPException(409, f'cannot remediate: {exc}')
         new_id = uuid4().hex[:12]
-        result = await build_orchestrator(runs, no_llm=True).run(patched, run_id=new_id)
+        result = await asyncio.to_thread(run_sync, patched, new_id, set())
         after = _cause(result, _report(result))
         return {'before': before, 'after': after, 'verified': after == 'normal', 'run_id': new_id}
 
