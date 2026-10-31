@@ -68,6 +68,8 @@
   </div>
 </aside>
 <main id="main" data-view="console">
+  <div id="backend-banner" class="backend-banner" role="status" hidden><span>Waking diagnostic backend...</span><button id="backend-retry" class="button outline">Retry connection</button></div>
+  <p id="status" class="muted workflow-status" role="status" hidden></p>
   <div id="view-console" class="view" data-view-panel="console">
     <section id="hero" class="card hero-card" aria-labelledby="hero-title">
       <div class="hero-top">
@@ -142,30 +144,31 @@
         </section>
       </aside>
     </div>
-    <!-- GROUP 5: legacy controls and views remain reachable until replaced. -->
-    <div id="legacy-workflow" class="report-column">
-        <!-- Legacy workflow remains reachable until Groups 2–5 replace it. -->
-        <section id="run-controls" class="card controls" tabindex="-1">
-          <label>Scenario<select id="scenario"></select></label>
-          <label>or upload telemetry (JSON)<input type="file" id="file" accept=".json,application/json"></label>
-          <label>Fail an agent (degrade test)<select id="fail"><option value="">none</option><option>performance</option><option>infrastructure</option><option>connectivity</option><option>correlator</option></select></label>
-          <button id="run">Run diagnosis</button><div id="status" class="muted" role="status"></div>
-        </section>
-        <section id="legacy-topology" class="card" tabindex="-1"><h2>Topology</h2><div id="topo"></div><p class="muted legend"><span class="dot bad"></span> affected <span class="dot ok"></span> other</p></section>
-    </div>
   </div>
-  <!-- GROUP 5: full view content and run/remediation modals. -->
-  <section id="view-topology" class="view card" data-view-panel="topology" hidden><h2>Live Topology</h2><p class="muted">The current topology is available in the console.</p><button class="button outline" data-view-target="console" data-focus="legacy-topology">Open console topology</button></section>
-  <section id="view-incidents" class="view card" data-view-panel="incidents" hidden><h2>Correlated Incidents</h2><p class="muted">Incident view pending.</p></section>
-  <section id="view-pipeline" class="view card" data-view-panel="pipeline" hidden><h2>Agent Pipeline</h2><p class="muted">The current agent bus is available in the console.</p><button class="button outline" data-view-target="console" data-focus="agent-bus">Open agent bus</button></section>
-  <section id="view-telemetry" class="view card" data-view-panel="telemetry" hidden><h2>Telemetry Stream</h2><p class="muted">The current message stream is available in the console.</p><button class="button outline" data-view-target="console" data-focus="agent-bus">Open message stream</button></section>
-  <section id="view-devices" class="view card" data-view-panel="devices" hidden><h2>Device Mesh</h2><p class="muted">Device view pending.</p></section>
-  <section id="view-playbooks" class="view card" data-view-panel="playbooks" hidden><h2>Automated Playbooks</h2><p class="muted">Playbook view pending.</p></section>
-  <section id="view-terminal" class="view card" data-view-panel="terminal" hidden><h2>CLI Terminal</h2><p class="muted">Terminal view pending.</p></section>
-  <section id="view-feeds" class="view card" data-view-panel="feeds" hidden><h2>Telemetry Feeds</h2><p class="muted">Telemetry feed view pending.</p></section>
-  <section id="view-settings" class="view card" data-view-panel="settings" hidden><h2>System Settings</h2><p class="muted">Settings view pending.</p></section>
+  <section id="view-topology" class="view card" data-view-panel="topology" hidden><h2>Live Topology</h2><div id="topo" role="region" aria-label="Network topology"></div><p class="muted legend"><span class="dot bad"></span> affected <span class="dot root"></span> upstream root <span class="dot ok"></span> other</p><div id="topology-device" class="device-metrics"><p class="muted">Select a node to inspect its metrics.</p></div></section>
+  <section id="view-incidents" class="view card" data-view-panel="incidents" hidden><h2>Correlated Incidents</h2><div id="incidents-table"></div></section>
+  <section id="view-pipeline" class="view" data-view-panel="pipeline" hidden><div id="pipeline-slot"></div><section class="card"><h2>Per-Agent Messages</h2><div id="agent-messages"></div></section></section>
+  <section id="view-telemetry" class="view" data-view-panel="telemetry" hidden><h2>Telemetry Stream</h2><div id="telemetry-bus-slot"></div><section class="card"><h2>Normalized Samples</h2><div id="samples-table"></div></section></section>
+  <section id="view-devices" class="view card" data-view-panel="devices" hidden><h2>Device Mesh</h2><div id="devices-table"></div></section>
+  <section id="view-playbooks" class="view card" data-view-panel="playbooks" hidden><h2>Automated Playbooks</h2><p class="muted">Simulated remediation — playbooks operate on copied telemetry.</p><div id="playbooks-list"></div></section>
+  <section id="view-terminal" class="view" data-view-panel="terminal" hidden><h2>CLI Terminal</h2><p class="muted">Local commands. Type help to list commands.</p><div id="terminal-bus-slot"></div></section>
+  <section id="view-feeds" class="view card" data-view-panel="feeds" hidden><h2>Telemetry Feeds</h2><div id="feeds-info"></div></section>
+  <section id="view-settings" class="view card" data-view-panel="settings" hidden><h2>System Settings</h2><div id="settings-info"></div></section>
 </main>
-<div id="run-modal-root"><!-- GROUP 5: run modal --></div>
+<div id="run-modal-root">
+  <dialog id="run-modal" aria-labelledby="run-modal-title">
+    <form id="run-form">
+      <h2 id="run-modal-title">Spawn Agent Run</h2>
+      <label class="modal-field" for="scenario">Scenario (expected diagnosis)<select id="scenario" required></select></label>
+      <label class="modal-field" for="file">Or upload telemetry (JSON, max 5 MB)<input type="file" id="file" accept=".json,application/json"></label>
+      <button id="clear-upload" type="button" class="button outline" hidden>Use selected scenario</button>
+      <fieldset id="fail"><legend>Fault injection (one agent per run)</legend><div id="fail-options" class="fault-options"></div></fieldset>
+      <label class="llm-toggle"><input type="checkbox" role="switch" disabled> LLM assist</label><p class="muted">server runs rules-only</p>
+      <p id="run-error" class="alert" role="alert" hidden></p>
+      <div class="modal-actions"><button id="run-cancel" type="button" class="button outline">Cancel</button><button id="run" type="submit" class="button primary" disabled>Start diagnostic run</button></div>
+    </form>
+  </dialog>
+</div>
 <div id="remediate-modal-root">
   <dialog id="remediate-modal" aria-labelledby="remediate-title" aria-describedby="remediate-description">
     <h2 id="remediate-title">Simulated remediation</h2>

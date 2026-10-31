@@ -4,8 +4,11 @@ const state = {
   runId: null, health: null, runs: null, report: null, details: null,
   messages: [], consoleMessages: [], topology: null, view: 'console', search: '', acknowledged: readAcknowledged(),
   running: false, scenariosReady: false, remediation: null, remediating: false,
+  playbooks: null, playbooksError: '', backendPending: 0, backendFailed: false, error: '',
 };
 let cy = null, source = null;
+const NO_SAMPLES = [];
+let renderedSamples = null;
 const ACK_KEY = 'netcoop.acknowledged';
 
 function readAcknowledged() {
@@ -150,6 +153,15 @@ function renderPipeline() {
   });
 }
 function renderViews() {
+  // Move shared sections rather than cloning ids, subscriptions or command forms.
+  const pipelineParent = state.view === 'pipeline' ? $('pipeline-slot') : $('view-console');
+  if ($('pipeline').parentElement !== pipelineParent) {
+    if (state.view === 'pipeline') pipelineParent.append($('pipeline'));
+    else pipelineParent.insertBefore($('pipeline'), $('report-layout'));
+  }
+  const busParent = state.view === 'telemetry' ? $('telemetry-bus-slot') :
+    state.view === 'terminal' ? $('terminal-bus-slot') : $('right-rail');
+  if ($('agent-bus').parentElement !== busParent) busParent.append($('agent-bus'));
   $('main').dataset.view = state.view;
   document.querySelectorAll('[data-view-panel]').forEach((panel) => { panel.hidden = panel.dataset.viewPanel !== state.view; });
   document.querySelectorAll('[data-view-target]').forEach((button) => {
@@ -164,7 +176,10 @@ function setView(view) {
   state.view = view; renderViews();
   $('sidebar').classList.remove('open');
   $('sidebar-toggle').setAttribute('aria-expanded', 'false');
-  if (view === 'console' && cy) { cy.resize(); cy.fit(); }
+  if (view === 'topology') { drawTopology(); if (cy) { cy.resize(); cy.fit(); } }
+  if (view === 'incidents') void refreshRuns();
+  if (view === 'playbooks' && !state.playbooks) void loadPlaybooks();
+  if (view === 'terminal') $('bus-input').focus();
 }
 function renderSearch() {
   document.querySelectorAll('#evidence > li, [data-searchable]').forEach((row) => {
@@ -174,7 +189,10 @@ function renderSearch() {
   $('bus-empty').hidden = visible;
   $('bus-empty').textContent = state.search ? 'No matching messages.' : state.running ? 'Waiting for run messages…' : 'No run messages yet.';
 }
-function renderShell() { renderTopBar(); renderSidebar(); renderHero(); renderPipeline(); renderReport(); renderRightRail(); renderBus(); }
+function renderShell() {
+  renderTopBar(); renderSidebar(); renderHero(); renderPipeline(); renderReport(); renderRightRail(); renderBus();
+  renderIncidents(); renderAgentMessages(); renderSamples(); renderDevices(); renderInfo(); renderStates();
+}
 
 function el(tag, text, cls) {
   const e = document.createElement(tag);
@@ -183,21 +201,46 @@ function el(tag, text, cls) {
   return e;
 }
 async function json(url, opts) {
-  const r = await fetch(url, opts);
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(body.detail || r.statusText);
-  return body;
+  const watchBackend = url === '/api/health' || url === '/api/run' || url === '/api/upload';
+  const controller = new AbortController();
+  let slow = false;
+  const timer = watchBackend ? setTimeout(() => {
+    slow = true; state.backendPending++; renderStates();
+  }, 1500) : null;
+  const timeout = setTimeout(() => controller.abort(), 60000);
+  try {
+    const r = await fetch(url, { ...opts, signal: controller.signal });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      // Validation/rate-limit errors are not backend availability failures.
+      if (watchBackend && r.status >= 500) state.backendFailed = true;
+      const detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
+      throw new Error(detail || r.statusText);
+    }
+    if (watchBackend) state.backendFailed = false;
+    return body;
+  } catch (err) {
+    if (watchBackend && (err.name === 'AbortError' || err instanceof TypeError)) state.backendFailed = true;
+    if (err.name === 'AbortError') throw new Error('Backend request timed out. Retry connection.');
+    throw err;
+  } finally {
+    clearTimeout(timer); clearTimeout(timeout);
+    if (slow) state.backendPending--;
+    renderStates();
+  }
 }
 
 async function init() {
   const results = await Promise.allSettled([json('/api/scenarios'), refreshShellData()]);
   if (results[0].status === 'rejected') throw results[0].reason;
   const list = results[0].value;
+  const selected = $('scenario').value || 'congestion';
+  $('scenario').replaceChildren();
   list.forEach((s) => {
     const o = el('option', s.name + '  (' + s.expected + ')'); o.value = s.name; $('scenario').append(o);
   });
-  $('scenario').value = 'congestion';
-  state.scenariosReady = true; renderHero();
+  $('scenario').value = list.some((s) => s.name === selected) ? selected : list[0]?.name || '';
+  state.scenariosReady = list.length > 0; renderHero(); renderStates();
 }
 
 // Single data-loading/subscription layer: all endpoint calls stay in these helpers.
@@ -206,6 +249,15 @@ async function refreshShellData() {
   if (results[0].status === 'fulfilled') state.health = results[0].value;
   if (results[1].status === 'fulfilled') state.runs = results[1].value;
   renderShell();
+}
+async function refreshRuns() {
+  try { state.runs = await json('/api/runs'); renderSidebar(); renderIncidents(); }
+  catch (err) { state.error = 'Cannot load incidents: ' + err.message; renderStates(); }
+}
+async function loadPlaybooks() {
+  try { state.playbooks = await json('/api/playbook'); state.playbooksError = ''; }
+  catch (err) { state.playbooksError = err.message; }
+  renderPlaybooks();
 }
 async function loadRunData() {
   state.report = await json(`/api/runs/${state.runId}/report`);
@@ -217,20 +269,26 @@ async function loadRunData() {
   renderShell(); drawTopology(); renderSearch();
 }
 function subscribeRun() {
-  source = new EventSource(`/api/runs/${state.runId}/stream`);
-  source.onmessage = (e) => {
+  const runId = state.runId;
+  const stream = new EventSource(`/api/runs/${runId}/stream`);
+  source = stream;
+  stream.onmessage = (e) => {
+    if (source !== stream) return;
     try { addMessage(JSON.parse(e.data)); }
-    catch { $('status').textContent = 'Error: unreadable stream message'; }
+    catch { state.error = 'Error: unreadable stream message'; renderStates(); }
   };
-  source.addEventListener('done', async () => {
-    source.close();
+  stream.addEventListener('done', async () => {
+    stream.close();
+    if (source !== stream) return;
     try { await loadRunData(); $('status').textContent = 'Run ' + state.runId + ' complete'; }
-    catch (err) { $('status').textContent = 'Error: ' + err.message; }
-    state.running = false; $('run').disabled = false; renderShell();
+    catch (err) { state.error = 'Error: ' + err.message; }
+    if (source !== stream) return;
+    state.running = false; renderShell();
   });
-  source.onerror = () => {
-    source.close(); state.running = false; $('run').disabled = false; renderShell();
-    $('status').textContent = 'Stream disconnected. Start a new run to retry.';
+  stream.onerror = () => {
+    stream.close();
+    if (source !== stream) return;
+    state.running = false; state.error = 'Stream disconnected. Select the incident to reload this run.'; renderShell();
   };
 }
 
@@ -253,31 +311,165 @@ function summarize(msg) {
 function addMessage(msg) {
   state.messages.push(msg);
   renderHero(); renderPipeline(); renderRightRail(); renderBus();
+  renderAgentMessages(); renderSamples();
 }
 
 function drawTopology() {
   const t = state.topology;
+  if (cy) { cy.destroy(); cy = null; }
   if (!t) { $('topo').textContent = 'No topology available.'; return; }
-  const bad = new Set(t.affected);
+  const bad = new Set(t.affected || []);
+  const ids = new Set(t.nodes.map((n) => n.id));
+  const links = t.links.filter((l) => ids.has(l.src) && ids.has(l.dst));
+  // Infer upstream roots only from directed paths supplied by the API.
+  const upstream = new Set(bad);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    links.forEach((l) => { if (upstream.has(l.dst) && !upstream.has(l.src)) { upstream.add(l.src); changed = true; } });
+  }
+  const roots = new Set(t.nodes.filter((n) => upstream.has(n.id) &&
+    !links.some((l) => l.dst === n.id)).map((n) => n.id));
   const cs = getComputedStyle(document.documentElement);
   const col = (n) => cs.getPropertyValue(n).trim();
-  if (cy) cy.destroy();
   if (!t.nodes.length) { $('topo').textContent = 'No topology supplied.'; cy = null; return; }
+  if (typeof cytoscape !== 'function') { $('topo').textContent = 'Topology renderer unavailable. Device metrics remain available in Device Mesh.'; return; }
+  if (state.view !== 'topology') { $('topo').textContent = ''; return; }
   $('topo').textContent = '';
   cy = cytoscape({
     container: $('topo'),
     elements: [
-      ...t.nodes.map((n) => ({ data: { id: n.id, label: n.id, bad: bad.has(n.id) ? 1 : 0 } })),
-      ...t.links.map((l, i) => ({ data: { id: 'e' + i, source: l.src, target: l.dst } })),
+      ...t.nodes.map((n) => ({ data: { id: n.id, label: n.id, bad: bad.has(n.id) ? 1 : 0, root: roots.has(n.id) ? 1 : 0 } })),
+      ...links.map((l, i) => ({ data: { id: 'edge-' + i, source: l.src, target: l.dst } })),
     ],
     style: [
       { selector: 'node', style: { label: 'data(label)', 'font-size': 9, color: col('--fg'), 'text-valign': 'bottom',
         'background-color': col('--ok') } },
       { selector: 'node[bad = 1]', style: { 'background-color': col('--bad'), width: 28, height: 28 } },
+      { selector: 'node[root = 1]', style: { 'background-color': col('--amber'), width: 30, height: 30 } },
       { selector: 'edge', style: { width: 2, 'line-color': col('--muted') } },
     ],
     layout: { name: 'breadthfirst', directed: true, padding: 10 },
   });
+  cy.on('tap', 'node', (event) => renderTopologyDevice(event.target.id()));
+}
+
+// GROUP 5: all secondary views project the same run state as the console.
+function renderTable(target, columns, rows, onSelect) {
+  const host = $(target); host.replaceChildren();
+  if (!rows.length) { empty(host, 'No data available.'); return; }
+  const scroll = el('div', undefined, 'table-scroll view-table-scroll');
+  scroll.tabIndex = 0; scroll.setAttribute('role', 'region'); scroll.setAttribute('aria-label', target.replaceAll('-', ' '));
+  const table = el('table', undefined, 'view-table'), head = el('thead'), tr = el('tr'), body = el('tbody');
+  columns.forEach(([label]) => { const th = el('th', label); th.scope = 'col'; tr.append(th); });
+  head.append(tr);
+  rows.forEach((item) => {
+    const row = el('tr'); row.dataset.searchable = '';
+    columns.forEach(([, get], index) => {
+      const td = el('td');
+      if (onSelect && index === 0) {
+        const button = el('button', display(get(item)), 'table-link');
+        button.disabled = state.running;
+        button.addEventListener('click', () => onSelect(item)); td.append(button);
+      } else td.textContent = display(get(item));
+      row.append(td);
+    });
+    if (onSelect) row.addEventListener('click', (event) => {
+      if (!state.running && !event.target.closest('button')) onSelect(item);
+    });
+    body.append(row);
+  });
+  table.append(head, body); scroll.append(table); host.append(scroll); renderSearch();
+}
+function renderIncidents() {
+  renderTable('incidents-table', [
+    ['Time (UTC)', (r) => r.created_at], ['Incident', (r) => r.incident_id || r.run_id],
+    ['Cause', (r) => r.cause], ['Confidence', (r) => percent(r.confidence)],
+    ['Status', (r) => r.status], ['Acknowledged', (r) => state.acknowledged.has(incidentKey(r)) ? 'Yes' : 'No'],
+  ], state.runs || [], selectRun);
+}
+function selectRun(row) {
+  if (state.running) return;
+  resetRun(); state.runId = row.run_id; state.running = true;
+  setView('console'); renderShell(); subscribeRun();
+}
+function renderAgentMessages() {
+  const host = $('agent-messages'); host.replaceChildren();
+  PIPELINE_AGENTS.forEach(([name]) => {
+    const section = el('section', undefined, 'agent-message-group'); section.append(el('h3', name));
+    const list = el('ol', undefined, 'agent-message-list mono');
+    runMessages().filter((m) => m.sender === name || m.recipient === name).forEach((m) => {
+      const row = el('li', clockLabel(m.timestamp, true) + ' [' + display(m.sender) + ' → ' + display(m.recipient) + '] ' + summarize(m));
+      row.dataset.searchable = ''; list.append(row);
+    });
+    if (!list.children.length) empty(section, 'No messages for this agent.');
+    section.append(list); host.append(section);
+  });
+  renderSearch();
+}
+function renderSamples() {
+  // Historical runs replay their SSE log, including the normalizer finding.
+  const rows = findingPayload('normalizer').telemetry?.samples || NO_SAMPLES;
+  if (rows === renderedSamples) return;
+  renderedSamples = rows;
+  const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  renderTable('samples-table', keys.map((key) => [key, (r) => r[key]]), rows);
+}
+function renderDevices() {
+  renderTable('devices-table', [
+    ['Device', (d) => d.device_id], ['Type', (d) => d.type], ['Role', (d) => d.role],
+    ['Location', (d) => d.location], ['Status', (d) => d.status],
+    ['Worst metric', (d) => d.worst_metric], ['Value', (d) => metricText(d.worst_metric, d.worst_value, d.unit)],
+    ['Severity', (d) => d.severity],
+  ], state.details?.devices || []);
+}
+function renderTopologyDevice(id) {
+  const host = $('topology-device'); host.replaceChildren(); host.append(el('h3', id));
+  const device = state.details?.devices?.find((d) => d.device_id === id);
+  if (device) host.append(el('p', Object.entries(device).filter(([key]) => key !== 'device_id')
+    .map(([key, value]) => key + ': ' + display(value)).join(' · ')));
+  const evidence = (state.report?.supporting_evidence || []).filter((e) => e.device_id === id);
+  evidence.forEach((e) => host.append(el('p', metricText(e.metric, e.value, e.unit) + ' — ' + display(e.interpretation), 'mono')));
+  const samples = (findingPayload('normalizer').telemetry?.samples || []).filter((s) => s.device_id === id);
+  const latest = samples.slice().sort((a, b) => (Date.parse(a.timestamp) || 0) - (Date.parse(b.timestamp) || 0)).at(-1);
+  if (latest) host.append(el('p', Object.entries(latest).filter(([key]) => key !== 'device_id')
+    .map(([key, value]) => key + ': ' + display(value)).join(' · '), 'mono'));
+  if (!device && !latest && !evidence.length) empty(host, 'No device metrics available.');
+}
+function renderPlaybooks() {
+  const host = $('playbooks-list'); host.replaceChildren();
+  if (!state.playbooks?.length) { empty(host, state.playbooksError || 'No playbooks loaded.'); return; }
+  state.playbooks.forEach((p) => {
+    const card = el('article', undefined, 'playbook-entry'); card.dataset.searchable = '';
+    card.append(el('h3', p.cause));
+    const list = el('ol'); (p.actions || []).forEach((a) => list.append(el('li', a)));
+    card.append(list, el('p', p.remediation, 'muted')); host.append(card);
+  });
+  renderSearch();
+}
+function renderInfo() {
+  ['feeds-info', 'settings-info'].forEach((id) => {
+    const host = $(id); host.replaceChildren();
+    const list = el('dl', undefined, 'info-list');
+    const fields = [['API base', location.origin + '/api'], ['Version', state.health?.version],
+      ['Uptime (seconds)', state.health?.uptime_s], ['LLM enabled', state.health?.llm_enabled],
+      ...Object.entries(state.health?.limits || {})];
+    fields.forEach(([key, value]) => list.append(el('dt', key), el('dd', display(value), 'mono')));
+    if (!state.health) host.append(el('p', 'Health information unavailable.', 'muted'));
+    host.append(list);
+  });
+}
+function renderStates() {
+  $('backend-banner').hidden = !state.backendPending && !state.backendFailed;
+  $('backend-retry').disabled = state.backendPending > 0;
+  $('scenario').required = !$('file').files.length;
+  $('run').disabled = state.running || (!state.scenariosReady && !$('file').files.length);
+  $('status').hidden = !$('status').textContent && !state.error;
+  $('main').setAttribute('aria-busy', String(state.running));
+  if (state.error) { $('status').textContent = state.error; $('status').hidden = false; }
+  $('status').classList.toggle('error-callout', !!state.error);
+  $('run-error').hidden = !state.error;
+  $('run-error').textContent = state.error;
 }
 
 // GROUP 3: report renderers consume only state.report and state.details.
@@ -408,13 +600,16 @@ async function executeCommand(command) {
         const option = [...$('scenario').options].find((o) => o.value === argument);
         if (!option) { reply('Use run <scenario>. Available: ' + [...$('scenario').options].map((o) => o.value).join(', ')); break; }
         $('scenario').value = option.value; $('file').value = '';
+        $('clear-upload').hidden = true;
         await run(); reply($('status').textContent, state.runId ? 'RESPONSE' : 'ERROR'); break;
       }
       case 'fail': {
-        const option = [...$('fail').options].find((o) => o.value === (argument === 'none' ? '' : argument));
-        if (!argument || !option) { reply('Use fail <agent>. Available: ' + [...$('fail').options].map((o) => o.value || 'none').join(', ')); break; }
-        $('fail').value = option.value;
-        reply(option.value ? 'Fault injection selected for next run: ' + option.value : 'Fault injection cleared for next run.'); break;
+        const inputs = [...$('fail-options').querySelectorAll('input')];
+        if (!argument || (argument !== 'none' && !inputs.some((input) => input.value === argument))) {
+          reply('Use fail <agent>. Available: ' + inputs.map((input) => input.value).join(', ') + ', none'); break;
+        }
+        inputs.forEach((input) => { input.checked = input.value === argument; });
+        reply(argument !== 'none' ? 'Fault injection selected for next run: ' + argument : 'Fault injection cleared for next run.'); break;
       }
       case 'evidence': {
         const evidence = state.report?.supporting_evidence;
@@ -572,7 +767,7 @@ function renderActions() {
   $('fixresult').className = result ? 'remediation-result ' + (result.verified ? 'pass' : 'fail') : '';
 }
 window.openRemediateModal = () => {
-  if (!canRemediate()) { $('status').textContent = 'Run a supported diagnosis to approve simulated remediation.'; return; }
+  if (!canRemediate()) { $('status').textContent = 'Run a supported diagnosis to approve simulated remediation.'; renderStates(); return; }
   $('remediate-target').textContent = 'Run: ' + state.runId + ' · Cause: ' + display(state.report.cause);
   $('remediate-modal').dataset.runId = state.runId;
   if (!$('remediate-modal').open) $('remediate-modal').showModal();
@@ -590,29 +785,39 @@ $('remediate-confirm').onclick = async () => {
   finally { state.remediating = false; renderActions(); await refreshShellData(); }
 };
 
-async function run() {
-  if (state.running) return;
-  state.running = true;
-  closeExportMenu();
-  $('run').disabled = true; $('status').textContent = 'Starting…';
-  state.remediation = null; $('remediate-modal').close();
-  state.runId = null; state.report = null; state.details = null; state.topology = null; state.messages = [];
+function resetRun() {
+  if (source) { source.close(); source = null; }
+  state.error = ''; state.remediation = null; $('remediate-modal').close();
+  state.runId = null; state.report = null; state.details = null; state.topology = null;
+  state.messages = []; state.consoleMessages = [];
   if (cy) { cy.destroy(); cy = null; }
   $('topo').textContent = '';
+  $('topology-device').replaceChildren(el('p', 'Select a node to inspect its metrics.', 'muted'));
+  $('status').textContent = '';
+}
+async function run(useUpload = true) {
+  if (state.running) return;
+  const f = useUpload ? $('file').files[0] : null;
+  if (f && f.size > 5_000_000) {
+    state.error = 'Upload exceeds the 5 MB limit.'; renderStates(); return;
+  }
+  resetRun(); state.running = true;
+  closeExportMenu();
+  $('run').disabled = true; $('status').textContent = 'Starting…';
   setView('console'); renderShell();
-  if (source) source.close();
   try {
-    const body = { fail_agent: $('fail').value || null };
-    const f = $('file').files[0];
-    if (f) body.upload_id = (await json('/api/upload', { method: 'POST', body: await f.text() })).upload_id;
+    const body = { fail_agent: $('fail-options').querySelector('input:checked')?.value || null };
+    if (f) body.upload_id = (await json('/api/upload', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: await f.text() })).upload_id;
     else body.scenario = $('scenario').value || 'congestion';
     state.runId = (await json('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body) })).run_id;
     $('status').textContent = 'Run ' + state.runId;
+    $('run-modal').close();
     renderShell(); subscribeRun();
   } catch (err) {
-    $('status').textContent = 'Error: ' + err.message;
-    state.running = false; $('run').disabled = false; renderShell();
+    state.error = 'Error: ' + err.message;
+    state.running = false; renderShell();
   }
 }
 
@@ -638,7 +843,7 @@ async function downloadReport(format) {
   document.body.append(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
-$('trigger-run').onclick = run;
+$('trigger-run').onclick = () => void run(false);
 $('export-toggle').onclick = () => {
   const open = $('export-menu').hidden;
   $('export-menu').hidden = !open;
@@ -649,13 +854,47 @@ document.querySelectorAll('[data-export]').forEach((button) => {
   button.onclick = async () => {
     closeExportMenu(); $('export-toggle').focus();
     try { await downloadReport(button.dataset.export); }
-    catch (err) { $('status').textContent = 'Export error: ' + err.message; }
+    catch (err) { state.error = 'Export error: ' + err.message; renderStates(); }
   };
 });
 document.addEventListener('click', (event) => { if (!event.target.closest('.export-control')) closeExportMenu(); });
 // Keep relative sweep time current without refetching the finished run.
 setInterval(() => { if (state.details?.finished_at) renderHero(); }, 1000);
-$('run').onclick = run;
+$('run-form').addEventListener('submit', (event) => { event.preventDefault(); void run(); });
+// /api/run accepts one fail_agent; checkboxes are mutually exclusive.
+['normalizer', 'performance', 'infrastructure', 'connectivity', 'correlator', 'reporter'].forEach((name) => {
+  const label = el('label'), input = el('input'); input.type = 'checkbox'; input.value = name;
+  input.addEventListener('change', () => {
+    if (input.checked) $('fail-options').querySelectorAll('input').forEach((other) => {
+      if (other !== input) other.checked = false;
+    });
+  });
+  label.append(input, el('span', name)); $('fail-options').append(label);
+});
+window.openRunModal = () => {
+  if (!$('run-modal').open) $('run-modal').showModal();
+  $('scenario').focus();
+};
+$('run-cancel').onclick = () => $('run-modal').close();
+$('file').addEventListener('change', () => {
+  $('clear-upload').hidden = !$('file').files.length;
+  $('status').textContent = '';
+  state.error = $('file').files[0]?.size > 5_000_000 ? 'Upload exceeds the 5 MB limit.' : '';
+  renderStates();
+});
+$('clear-upload').onclick = () => {
+  $('file').value = ''; $('clear-upload').hidden = true;
+  state.error = ''; $('status').textContent = ''; renderStates();
+};
+$('scenario').addEventListener('change', () => {
+  $('file').value = ''; $('clear-upload').hidden = true;
+  state.error = ''; $('status').textContent = ''; renderStates();
+});
+$('backend-retry').onclick = async () => {
+  state.backendFailed = false; state.error = ''; renderStates();
+  try { await init(); }
+  catch (err) { state.backendFailed = true; state.error = err.message; renderStates(); }
+};
 document.querySelectorAll('[data-view-target]').forEach((button) => {
   button.addEventListener('click', (event) => {
     event.preventDefault(); setView(button.dataset.viewTarget);
@@ -671,8 +910,7 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') { $('sidebar').classList.remove('open'); $('sidebar-toggle').setAttribute('aria-expanded', 'false'); }
 });
 $('spawn-run').onclick = () => {
-  if (typeof window.openRunModal === 'function') { window.openRunModal(); return; }
-  setView('console'); $('run-controls').scrollIntoView({ block: 'start' }); $('scenario').focus();
+  window.openRunModal();
 };
 $('quarantine').onclick = () => window.openRemediateModal();
 $('acknowledge-all').onclick = () => {
@@ -682,8 +920,8 @@ $('acknowledge-all').onclick = () => {
   runs.forEach((r) => { const key = incidentKey(r); if (key) state.acknowledged.add(key); });
   try { localStorage.setItem(ACK_KEY, JSON.stringify([...state.acknowledged])); }
   catch { $('status').textContent = 'Acknowledged for this session; browser storage is unavailable.'; }
-  renderSidebar();
+  renderSidebar(); renderIncidents(); renderStates();
 };
 $('search').addEventListener('input', () => { state.search = $('search').value.trim().toLowerCase(); renderSearch(); });
 renderViews(); renderShell();
-init().catch((e) => { $('status').textContent = 'Error: ' + e.message; });
+init().catch((e) => { state.error = 'Error: ' + e.message; renderStates(); });
