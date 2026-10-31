@@ -784,7 +784,8 @@ async function executeCommand(command) {
         const { alternatives, agentView } = alternativeList(state.report, state.details);
         reply(alternatives.length ? alternatives.map((a) => label(a.cause) + ': ' +
           (Number.isFinite(a.confidence) ? percent(a.confidence) + (agentView ? ' agent score' : '') : '—') +
-          ' — ' + humanText(a.overruled_by || a.rationale || '—')).join('\n') : 'No alternative explanations reported.'); break;
+          ' — ' + (a.independent === true ? 'separate issue on ' + (a.devices || []).join(', ') :
+            humanText(a.overruled_by || a.rationale || '—'))).join('\n') : 'No alternative explanations reported.'); break;
       }
       case 'remediate':
         if (!canRemediate()) { reply('Run a supported diagnosis before simulated remediation.'); break; }
@@ -964,13 +965,15 @@ function renderHypotheses() {
   const { alternatives, agentView } = alternativeList(r, d);
   alternatives.forEach((a) => {
     const known = Number.isFinite(a.confidence), ruledOut = a.rejected || known && a.confidence < 0.2;
-    const card = el('article', undefined, 'alternative-card' + (known ? ruledOut ? ' ruled-out' : ' partial' : ''));
+    const separate = a.independent === true;
+    const card = el('article', undefined, 'alternative-card' + (known && !separate ? ruledOut ? ' ruled-out' : ' partial' : ''));
     const heading = el('div', undefined, 'alternative-heading');
     heading.append(el('strong', label(a.cause)),
       el('span', percent(a.confidence) + (agentView ? ' Agent Score' : ' Heuristic Score'), 'mono'));
     const rationale = el('p', undefined, 'hypothesis-rationale');
-    rationale.append(el('strong', a.overruled_by ? 'Overruled by: ' : agentView ? 'Set Aside by Correlator: ' :
-      known ? ruledOut ? 'Ruled Out: ' : 'Partial Contributor: ' : '— '), el('span', humanText(a.overruled_by || a.rationale) || '—'));
+    rationale.append(el('strong', separate ? 'Separate Issue: ' : a.overruled_by ? 'Overruled by: ' : agentView ? 'Set Aside by Correlator: ' :
+      known ? ruledOut ? 'Ruled Out: ' : 'Partial Contributor: ' : '— '), el('span', separate ?
+      'on ' + (a.devices || []).join(', ') + '; not explained by the primary diagnosis' : humanText(a.overruled_by || a.rationale) || '—'));
     card.append(heading, confidenceBar(a.confidence), rationale); grid.append(card);
   });
   if (!alternatives.length) empty(grid, r ? 'No alternative explanations reported.' : '—');

@@ -181,3 +181,16 @@ S18 live re-check (87c0674, Render redeployed in ~90 s): /api/health shows per-s
 S19 live re-check (e180e7a, live within ~60 s): via Vercel dns_failure → severity critical, affected [DNS_SRV_01], 0.931; FQA02 → latency_degradation, affected [AP-A]; Vercel app.js has "Diagnosis confidence".
 
 S20 live feature sweep (0f5dbb8): every UI feature exercised on the live site; three display defects found and fixed in T34 (percent rounding mismatch, `alts` console command vs panel, blank Playbooks view during first load).
+
+### Claude audit of 68db274 (S21)
+
+| ID | Pri | Verdict + evidence | Status |
+|---|---|---|---|
+| A1 | P2 | Confirmed: congestion on R1 + weak Wi-Fi on unlinked AP2 -> weak Wi-Fi (82.7%) shown as "overruled by utilization plus queue drops" (R1's metrics); AP2 invisible | Tested (T36: independent alternative + limitation + "Separate Issue" card; linked/same-device cases unchanged) |
+| A2 | P2 | Confirmed: unit suffix ignored: latency "0.3 s" -> 0.3 ms (fault missed), "400us" -> 400 ms (false fault), "1 Gbps" -> 1 Mbps | Tested (T35) |
+| A3 | P2 | Confirmed: congestion.json with a UTF-8 BOM -> "invalid JSON telemetry" (CLI, upload, MCP) | Tested (T35) |
+| A4 | P3 | Confirmed: integer epoch timestamps -> sample excluded as invalid | Tested (T35: epoch s/ms -> ISO Z) |
+| A5 | P3 | Confirmed: every remediated run reported "unknown field root.quarantined dropped" (normalizer bookkeeping re-diagnosed) | Tested (playbook drops it; test_qa_t34) |
+| A6 | P3 | Likely (config): uvicorn trusts X-Forwarded-For only from 127.0.0.1, so behind Vercel/Render the per-IP bucket is the proxy address; README claimed a true per-IP limit | README wording corrected; no code change (spoofable header, concurrency cap is the hard guard) |
+| A7 | P1 | Confirmed (security): numeric-string regex backtracked quadratically on whitespace: 20k spaces 1.3 s, 50 KB file 9 s on deployed code; 5 MB upload ~hours of CPU | Tested (possessive quantifiers: 1M spaces 1.6 ms; regression test) |
+| - | - | Not defects: org_hardware_failure / schema_v0_legacy remediation "not verified" because their data also contains congestion signs the hardware/CPU playbooks rightly leave alone | Accepted |

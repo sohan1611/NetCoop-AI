@@ -122,7 +122,8 @@ _UNIT_SUFFIXES = (("_pct", "%"), ("_ms", "ms"), ("_mbps", "Mbps"), ("_dbm", "dBm
 _RECORD_KEY = re.compile(r"[A-Za-z_][A-Za-z_.]*\[\d+\]")
 _INDEX = re.compile(r"\[\d+\]")
 
-_NUMERIC_STRING = re.compile(r"^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*[A-Za-z%/]{0,8}\s*$")
+# Possessive quantifiers: the spaces around the unit must never be re-split (backtracking DoS).
+_NUMERIC_STRING = re.compile(r"^\s*+([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*+([A-Za-zµμ%/]{0,10})\s*+$")
 
 SECTION_FIELDS = {
     "nodes": {"id", "type", "role", "location"},
@@ -285,9 +286,9 @@ def _error_result(message: str, tracker: _QualityTracker) -> NormalizeResult:
 
 def _parse_raw(raw: str | bytes | dict | list) -> dict[str, Any] | list[Any]:
     if isinstance(raw, bytes):
-        raw = raw.decode("utf-8")
+        raw = raw.decode("utf-8-sig")
     if isinstance(raw, str):
-        raw = json.loads(raw)
+        raw = json.loads(raw.removeprefix("\ufeff"))
     if not isinstance(raw, (dict, list)):
         raise TypeError("telemetry input must decode to an object or list")
     return raw
@@ -352,7 +353,26 @@ def _convert_value(value: Any, target: str, factor: float,
         if isinstance(value, str):
             match = _NUMERIC_STRING.match(value)
             if match is not None:
-                tracker.add("coerced", f"coerced numeric string at {path}: {value!r}")
+                suffix = match.group(2).replace(" ", "").lower()
+                if suffix:
+                    unit = next((name for name in ("ms", "pct", "mbps", "dbm")
+                                 if target.endswith(f"_{name}")), None)
+                    conversions = {
+                        "ms": {"ms": 1.0, "s": 1000.0, "sec": 1000.0, "secs": 1000.0,
+                               "us": 0.001, "µs": 0.001, "μs": 0.001},
+                        "pct": {"%": 1.0, "pct": 1.0, "percent": 1.0},
+                        "mbps": {"mbps": 1.0, "mb/s": 1.0, "mbit/s": 1.0,
+                                 "kbps": 0.001, "kb/s": 0.001,
+                                 "gbps": 1000.0, "gb/s": 1000.0, "bps": 1e-6},
+                        "dbm": {"dbm": 1.0},
+                    }
+                    if unit is not None and suffix not in conversions[unit]:
+                        tracker.add("wrong_type", f"unit {suffix!r} at {path} is not "
+                                    f"convertible to {unit}; value dropped")
+                        return None
+                    factor = conversions[unit][suffix] if unit is not None else 1.0
+                conversion = f"; converted x{factor:g}" if factor != 1.0 else ""
+                tracker.add("coerced", f"coerced numeric string at {path}: {value!r}{conversion}")
                 value = float(match.group(1))
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             tracker.add("wrong_type", f"wrong type for {path}; expected a number")
@@ -568,6 +588,18 @@ def _merge_devices(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _parse_timestamp(value: Any) -> datetime | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) or (isinstance(value, str) and value.isdigit()):
+        try:
+            epoch = float(value)
+            if not math.isfinite(epoch) or epoch < 0:
+                return None
+            parsed = datetime.fromtimestamp(epoch / 1000 if epoch >= 1e12 else epoch,
+                                            tz=timezone.utc)
+        except (ValueError, OverflowError, OSError):
+            return None
+        return parsed if 2000 <= parsed.year <= 2100 else None
     if not isinstance(value, str):
         return None
     try:
@@ -585,7 +617,7 @@ def _latest_timestamp(samples: list[dict[str, Any]]) -> str | None:
         for sample in samples
         if (parsed := _parse_timestamp(sample.get("timestamp"))) is not None
     ]
-    return max(valid, key=lambda item: item[0])[1] if valid else None
+    return max(valid, key=lambda item: item[0])[0].isoformat().replace("+00:00", "Z") if valid else None
 
 
 def _base_telemetry(*, incident_id: Any = "UNKNOWN", collected_at: Any = None,
@@ -781,6 +813,12 @@ def _validate_rows(telemetry: dict[str, Any], tracker: _QualityTracker) -> None:
 
     reference = (_parse_timestamp(telemetry.get("collected_at"))
                  or _parse_timestamp(_latest_timestamp(telemetry["samples"])))
+    collected_at = telemetry.get("collected_at")
+    collected_timestamp = _parse_timestamp(collected_at)
+    if collected_timestamp is not None and (isinstance(collected_at, (int, float))
+                                  or (isinstance(collected_at, str) and collected_at.isdigit())):
+        telemetry["collected_at"] = collected_timestamp.isoformat().replace("+00:00", "Z")
+        tracker.add("coerced", "epoch timestamp at root.collected_at converted to ISO-8601")
     supplied_samples = bool(telemetry["samples"])
     samples = []
     stale_count = 0
@@ -792,6 +830,12 @@ def _validate_rows(telemetry: dict[str, Any], tracker: _QualityTracker) -> None:
             quarantine(sample, "timestamp", sample["timestamp"], "invalid timestamp")
             invalid_count += 1
             continue
+        if timestamp is not None:
+            value = sample["timestamp"]
+            if isinstance(value, (int, float)) or (isinstance(value, str) and value.isdigit()):
+                sample["timestamp"] = timestamp.isoformat().replace("+00:00", "Z")
+                tracker.add("coerced", f"epoch timestamp at samples[{index}].timestamp "
+                            "converted to ISO-8601")
         reason = None
         if timestamp is not None and reference is not None:
             if timestamp < reference - timedelta(hours=1):

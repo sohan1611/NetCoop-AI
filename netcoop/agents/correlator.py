@@ -1221,17 +1221,46 @@ class CorrelatorAgent(Agent):
         evidence, sources = self._supporting_evidence(context, winner)
         affected = self._affected_devices(context, winner)
         evidence = _enrich_evidence(evidence, context.telemetry, affected)
+        independent: dict[str, list[str]] = {}
+        if not insufficient and winner.cause != "normal":
+            for candidate in result.ordered[1:]:
+                if candidate.cause in {"normal", "insufficient_evidence"}:
+                    continue
+                devices = self._signature_devices(context, candidate)
+                if devices and set(devices).isdisjoint(affected) and not any(
+                    (link.get("src") in devices and link.get("dst") in affected)
+                    or (link.get("dst") in devices and link.get("src") in affected)
+                    for link in (context.telemetry.get("topology") or {}).get("links", [])
+                ):
+                    independent[candidate.cause] = devices
+        if independent:
+            # Winner-selection notes must describe competing, related causes only.
+            conflicts = [item for item in conflicts if not item.startswith("selected by")]
+            higher = [candidate for candidate in result.ordered[1:]
+                      if candidate.cause not in independent
+                      and candidate.confidence >= winner.confidence > 0.0]
+            if not higher:
+                conflicts = [item for item in conflicts
+                             if not item.startswith("Conflict resolved by domain rule")]
+            elif not insufficient:
+                raw = ", ".join(f"{item.cause}={item.confidence:.3f}" for item in higher)
+                how = "domain rule" if result.resolution is not None else "agent-weighted rank"
+                conflicts.append(
+                    f"selected by {how} over higher raw score: {winner.cause}="
+                    f"{winner.confidence:.3f} vs {raw}"
+                )
         alternatives = []
         for candidate in (result.ordered if result.unresolved_conflict else result.ordered[1:]):
+            separate = candidate.cause in independent
             conflict_alternative = (
                 result.unresolved_conflict
                 and abs(winner.confidence - candidate.confidence) <= ALTERNATIVE_CONFIDENCE_WINDOW
             )
             overruled = (
-                not insufficient and result.resolution is not None
+                not separate and not insufficient and result.resolution is not None
                 and candidate.confidence >= confidence
             )
-            if not conflict_alternative and not overruled and not (
+            if not (separate and candidate.confidence >= 0.5) and not conflict_alternative and not overruled and not (
                 candidate.confidence < confidence
                 and confidence - candidate.confidence <= ALTERNATIVE_CONFIDENCE_WINDOW
             ):
@@ -1240,7 +1269,16 @@ class CorrelatorAgent(Agent):
                 "cause": candidate.cause,
                 "confidence": round(candidate.confidence, 6),
             }
-            if conflict_alternative:
+            if separate:
+                devices = independent[candidate.cause]
+                alternative.update(independent=True, devices=devices)
+                if candidate.confidence >= 0.5:
+                    conflicts.append(
+                        f"independent issue: {candidate.cause} on {', '.join(devices)} "
+                        f"({candidate.confidence:.0%}) is not explained by {winner.cause} "
+                        f"on {', '.join(affected)}; investigate separately"
+                    )
+            elif conflict_alternative:
                 alternative["overruled_by"] = "unresolved agent conflict"
             elif overruled:
                 alternative["overruled_by"] = result.resolution
@@ -1374,11 +1412,10 @@ class CorrelatorAgent(Agent):
         return [payload for _, payload, _ in selected], sources
 
     @staticmethod
-    def _affected_devices(
+    def _signature_devices(
         context: _RunContext, winner: _Candidate
     ) -> list[str]:
-        """Devices with a non-zero grade on the winning signature's metrics (worst first),
-        plus an independently abnormal common upstream device, when present."""
+        """Devices with abnormal signature metrics, without upstream context."""
         if winner.cause == "normal":
             return []
         _, quality_issues, _ = _quality_details(context.findings)
@@ -1388,7 +1425,17 @@ class CorrelatorAgent(Agent):
             for grade, device_id in _graded_rows(winner.telemetry or context.telemetry, metric, critical_status):
                 if grade > 0 and device_id is not None:
                     graded[device_id] = max(graded.get(device_id, 0.0), grade)
-        devices = [d for d, _ in sorted(graded.items(), key=lambda item: -item[1])]
+        return [d for d, _ in sorted(graded.items(), key=lambda item: -item[1])]
+
+    @staticmethod
+    def _affected_devices(
+        context: _RunContext, winner: _Candidate
+    ) -> list[str]:
+        """Devices with a non-zero grade on the winning signature's metrics (worst first),
+        plus an independently abnormal common upstream device, when present."""
+        if winner.cause == "normal":
+            return []
+        devices = CorrelatorAgent._signature_devices(context, winner)
         connectivity = context.findings.get("connectivity", {})
         for item in connectivity.get("evidence", []) if isinstance(connectivity, dict) else []:
             if (isinstance(item, dict) and item.get("metric") == "common_upstream"

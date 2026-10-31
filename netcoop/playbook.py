@@ -36,6 +36,8 @@ def simulate_remediation(cause: str, telemetry: dict[str, Any]) -> dict[str, Any
     if cause not in PLAYBOOK:
         raise ValueError(f'Unknown remediation cause: {cause}')
     patched = deepcopy(telemetry)
+    # Normalizer bookkeeping, not input: re-diagnosing it would add an "unknown field" note.
+    patched.pop('quarantined', None)
     rows = [*patched.get('devices', []), *patched.get('samples', [])]
     metrics = _METRICS.get(cause, {})
     affected = set()

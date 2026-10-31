@@ -101,6 +101,14 @@ All agent traffic uses schema version `1.0` and an `Envelope`. Canonical units a
 | `limitations` | Missing evidence, failed agents, or other caveats. | none |
 | `run_id` | Diagnosis-run identifier. | none |
 
+The correlator's `diagnosis.alternatives` items contain `cause` and `confidence`,
+and may include `overruled_by` for competing causes. A fault on disjoint devices
+with no direct topology link to the primary affected devices instead carries
+`independent: true` and `devices: [device_id, ...]`, without `overruled_by`.
+Independent issues scoring at least 0.5 remain visible outside the usual
+alternative confidence window. The details response preserves these fields;
+the report's `alternative_causes` text describes them as a separate issue.
+
 ```json
 {"incident_id":"INC-0001","status":"diagnosed","suspected_root_cause":"congestion","confidence":0.82,"confidence_category":"high","affected_devices":["AP-01"],"supporting_evidence":[{"metric":"latency","value":180,"interpretation":"Latency exceeds 100 ms."}],"alternative_causes":["device_overload"],"recommended_actions":["Reduce traffic on the uplink."],"evidence_sources":["performance","connectivity"],"limitations":[],"run_id":"RUN-0001"}
 ```

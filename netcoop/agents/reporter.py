@@ -81,7 +81,8 @@ class ReporterAgent(Agent):
                 affected_devices=diagnosis['affected_devices'],
                 supporting_evidence=diagnosis['evidence'],
                 alternative_causes=[f"{item['cause'].replace('_', ' ')} (confidence {item['confidence']:.1%})"
-                                    + (f" \u2014 overruled by {item['overruled_by']}" if item.get('overruled_by') else '')
+                                    + (f" \u2014 separate issue on {', '.join(item['devices'])}" if item.get('independent') is True
+                                       else f" \u2014 overruled by {item['overruled_by']}" if item.get('overruled_by') else '')
                                     for item in diagnosis.get('alternatives', [])],
                 recommended_actions=PLAYBOOK[cause]['actions'],
                 evidence_sources=diagnosis['evidence_sources'],
