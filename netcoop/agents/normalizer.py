@@ -114,6 +114,8 @@ ISSUE_PENALTIES = {
 KIND_PENALTY_CAP = 0.25  # one kind of problem can never cost more than this
 KIND_REPEAT_CAP = 5      # repeats beyond this add nothing
 MAX_REPORTED_ISSUES = 25
+MAX_MAPPINGS = 1000  # per run; the details endpoint shows at most 50
+_UNIT_SUFFIXES = (("_pct", "%"), ("_ms", "ms"), ("_mbps", "Mbps"), ("_dbm", "dBm"))
 _RECORD_KEY = re.compile(r"[A-Za-z_][A-Za-z_.]*\[\d+\]")
 _INDEX = re.compile(r"\[\d+\]")
 
@@ -173,6 +175,8 @@ class NormalizeResult(BaseModel):
     telemetry: dict[str, Any] | None
     data_quality: DataQuality
     error: str | None = None
+    mappings: list[dict[str, Any]] = []
+    formats: list[str] = []
 
 
 @dataclass
@@ -181,6 +185,34 @@ class _QualityTracker:
     issues: list[str] = field(default_factory=list)
     kinds: list[str] = field(default_factory=list)
     total_records: int = 0
+    source_format: str = "canonical v1"
+    mappings: list[dict[str, Any]] = field(default_factory=list)
+    format_flags: set[str] = field(default_factory=set)
+
+    def map(self, device_id: Any, raw_path: str, raw_value: Any, metric: str,
+            value: Any, *, raw_key: str = "", factor: float = 1.0) -> None:
+        """Record how one raw field became a canonical metric (for the details view)."""
+        notes = []
+        if raw_key and raw_key != metric:
+            notes.append(f"alias {raw_key} -> {metric}")
+            self.format_flags.add("aliased fields")
+            if raw_key != _canonical_key(raw_key):
+                self.format_flags.add("CamelCase fields")
+        if factor != 1.0:
+            notes.append(f"unit x{factor:g}")
+            self.format_flags.add("unit-converted")
+        if isinstance(raw_value, str) and isinstance(value, (int, float)):
+            notes.append("coerced from string")
+        if len(self.mappings) >= MAX_MAPPINGS:
+            return
+        unit = next((u for suffix, u in _UNIT_SUFFIXES if metric.endswith(suffix)), None)
+        self.mappings.append({
+            "source_format": self.source_format,
+            "device_id": device_id if isinstance(device_id, str) else None,
+            "raw_path": raw_path,
+            "raw_value": raw_value if isinstance(raw_value, (str, int, float, bool)) else str(raw_value),
+            "metric": metric, "value": value, "unit": unit, "note": "; ".join(notes),
+        })
 
     def add(self, kind: str, message: str) -> None:
         self.issues.append(message)
@@ -375,6 +407,8 @@ def _normalize_row(raw: Any, section: str, tracker: _QualityTracker,
     if section in ('devices', 'samples'):
         raw = _map_leaf_fields(raw, (section,), tracker, path)
     result: dict[str, Any] = {}
+    owner = next((raw[k] for k in ("device_id", "device", "deviceId", "node_id", "server_id")
+                  if isinstance(raw.get(k), str)), None)
     for key, value in raw.items():
         if not isinstance(key, str):
             tracker.add("unknown", f"unknown field {path}.{key!r} dropped")
@@ -390,6 +424,9 @@ def _normalize_row(raw: Any, section: str, tracker: _QualityTracker,
         )
         if converted is not None:
             result[target] = converted
+            if section in ("devices", "samples", "services") and (
+                    target in NUMERIC_FIELDS or target == "status"):
+                tracker.map(owner, key, value, target, converted, raw_key=key, factor=factor)
     for required in sorted(SECTION_REQUIRED[section] - result.keys()):
         tracker.add("no_timestamp" if required == "timestamp" else "missing",
                     f"missing field {path}.{required}")
@@ -437,6 +474,7 @@ def _split_metric_row(row: dict[str, Any], tracker: _QualityTracker, path: str,
         status = _normalize_status(row["status"], tracker, f"{path}.status", organizer=organizer)
         if status is not None:
             device["status"] = status
+            tracker.map(device.get("device_id"), "status", row["status"], "status", status)
     if "type" in row:
         device_type = _convert_value(row["type"], "type", 1.0, tracker, f"{path}.type")
         if device_type is not None:
@@ -457,16 +495,21 @@ def _split_metric_row(row: dict[str, Any], tracker: _QualityTracker, path: str,
             continue
         device_target, device_factor = _resolve_field(key, "devices")
         sample_target, sample_factor = _resolve_field(key, "samples")
+        raw_path = f"metrics.{key}" if organizer else key
         if device_target is not None:
             converted = _convert_value(value, device_target, device_factor, tracker,
                                        f"{path}.metrics.{key}")
             if converted is not None:
                 device[device_target] = converted
+                tracker.map(device.get("device_id"), raw_path, value, device_target,
+                            converted, raw_key=key, factor=device_factor)
         elif sample_target is not None:
             converted = _convert_value(value, sample_target, sample_factor, tracker,
                                        f"{path}.metrics.{key}")
             if converted is not None:
                 sample[sample_target] = converted
+                tracker.map(device.get("device_id"), raw_path, value, sample_target,
+                            converted, raw_key=key, factor=sample_factor)
         else:
             tracker.add("unknown", f"unknown field {path}.metrics.{key} dropped")
 
@@ -541,6 +584,7 @@ def _normalize_symptoms(raw: Any, tracker: _QualityTracker) -> list[str]:
 
 
 def _normalize_organizer(rows: list[Any], tracker: _QualityTracker) -> dict[str, Any]:
+    tracker.source_format = "organizer"
     devices: list[dict[str, Any]] = []
     samples: list[dict[str, Any]] = []
     for index, row in enumerate(rows):
@@ -568,6 +612,7 @@ def _normalize_legacy(source: dict[str, Any], tracker: _QualityTracker) -> dict[
     Identity/status/CPU/memory/error fields become device rows. Timestamp and
     traffic measurements become sample rows; repeated device rows are merged.
     """
+    tracker.source_format = "legacy v0"
     rows = source.get("nodes", source.get("readings", []))
     if not isinstance(rows, list):
         tracker.add("wrong_type", "wrong type for legacy rows; expected a list")
@@ -744,7 +789,11 @@ def normalize(raw: str | bytes | dict | list, use_llm: bool = False) -> Normaliz
                 return _error_result(
                     f"input too large: {len(telemetry[section])} {section} (max {limit})", tracker)
         _validate_rows(telemetry, tracker)
-        return NormalizeResult(telemetry=telemetry, data_quality=tracker.model())
+        return NormalizeResult(
+            telemetry=telemetry, data_quality=tracker.model(),
+            mappings=tracker.mappings,
+            formats=[tracker.source_format, *sorted(tracker.format_flags)],
+        )
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         log.info("invalid JSON telemetry: %s", getattr(exc, "msg", exc))
         return _error_result("invalid JSON telemetry", tracker)
@@ -806,6 +855,8 @@ class NormalizerAgent(Agent):
             )
             payload = finding.model_dump(mode="json")
             payload["telemetry"] = result.telemetry
+            payload["mappings"] = result.mappings
+            payload["formats"] = result.formats
             return [Envelope(
                 type=MsgType.FINDING,
                 sender=self.name,

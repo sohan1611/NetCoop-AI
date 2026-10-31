@@ -99,3 +99,4 @@ class Report(BaseModel):
     evidence_sources: list[str]
     limitations: list[str]
     run_id: str
+    cause: str | None = None

@@ -166,3 +166,89 @@ def test_api_errors_do_not_leak_exception_text(tmp_path):
     c.get(f'/api/runs/{run_id}/report')
     detail = c.post(f'/api/runs/{run_id}/remediate').json()['detail']
     assert detail.startswith('cannot remediate') and 'Error' not in detail
+
+
+# --- T18 A1-A6 ---------------------------------------------------------------
+def _finished_run(c, scenario='congestion'):
+    run_id = c.post('/api/run', json={'scenario': scenario}).json()['run_id']
+    c.get(f'/api/runs/{run_id}/report')  # waits for the run
+    return run_id
+
+
+def test_details_shape_for_congestion(tmp_path):
+    c = _client(tmp_path)
+    d = c.get(f'/api/runs/{_finished_run(c)}/details').json()
+    assert d['incident_id'] and d['status'] == 'diagnosed' and d['rounds'] >= 0
+    assert d['started_at'] <= d['finished_at']
+    assert set(d['window']) == {'first', 'last', 'seconds'}
+    assert d['formats'] == ['canonical v1']
+    assert [a['name'] for a in d['agents']] == [
+        'normalizer', 'performance', 'infrastructure', 'connectivity', 'correlator']
+    allowed = {'complete', 'flagged', 'alert', 'failed', 'abstained'}
+    assert all(a['status'] in allowed and 'stats' in a and 'summary' in a for a in d['agents'])
+    assert set(d['consensus']) == {'engaged', 'total', 'in_accord', 'synchronized'}
+    assert d['consensus']['total'] == 5 and d['consensus']['in_accord'] <= d['consensus']['engaged']
+    worst = next(x for x in d['devices'] if x['device_id'] == 'CORE_RTR_01')
+    assert worst['severity'] == 'critical' and worst['role'] and worst['worst_metric']
+    assert d['latency_series'] and set(d['latency_series'][0]) == {'t', 'value'}
+    assert 'CORE_RTR_01' in d['primary_rationale']
+    assert len(d['mappings']) <= 50 and d['mappings'][0]['device_id'] == 'CORE_RTR_01'
+    assert set(d['mappings'][0]) == {'source_format', 'device_id', 'raw_path', 'raw_value',
+                                     'metric', 'value', 'unit', 'note'}
+
+
+def test_details_records_organizer_format_and_failed_agent(tmp_path):
+    c = _client(tmp_path)
+    raw = (server.ROOT / 'data' / 'scenarios' / 'org_hardware_failure.json').read_bytes()
+    up = c.post('/api/upload', content=raw).json()['upload_id']
+    run_id = c.post('/api/run', json={'upload_id': up, 'fail_agent': 'performance'}).json()['run_id']
+    c.get(f'/api/runs/{run_id}/report')
+    d = c.get(f'/api/runs/{run_id}/details').json()
+    assert d['formats'][0] == 'organizer' and 'aliased fields' in d['formats']
+    assert any(m['raw_path'].startswith('metrics.') for m in d['mappings'])
+    performance = next(a for a in d['agents'] if a['name'] == 'performance')
+    assert performance['status'] == 'failed'
+    connectivity = next(a for a in d['agents'] if a['name'] == 'connectivity')
+    assert connectivity['status'] == 'abstained'
+
+
+def test_details_for_error_run_is_partial_not_500(tmp_path):
+    c = _client(tmp_path)
+    up = c.post('/api/upload', content=b'{not json').json()['upload_id']
+    run_id = c.post('/api/run', json={'upload_id': up}).json()['run_id']
+    c.get(f'/api/runs/{run_id}/report')
+    res = c.get(f'/api/runs/{run_id}/details')
+    assert res.status_code == 200
+    d = res.json()
+    assert d['status'] == 'error' and d['devices'] == [] and d['mappings'] == []
+    assert c.get('/api/runs/nope/details').status_code == 404
+
+
+def test_runs_list_is_recent_first_and_capped(tmp_path):
+    c = _client(tmp_path)
+    ids = [_finished_run(c) for _ in range(3)]
+    rows = c.get('/api/runs').json()
+    assert [r['run_id'] for r in rows[:3]] == ids[::-1]
+    assert set(rows[0]) == {'run_id', 'incident_id', 'cause', 'status', 'confidence', 'created_at'}
+    assert rows[0]['cause'] == 'congestion' and rows[0]['status'] == 'diagnosed'
+    assert len(rows) <= 20
+
+
+def test_playbook_and_health(tmp_path):
+    c = _client(tmp_path)
+    book = c.get('/api/playbook').json()
+    assert {'congestion', 'hardware_failure', 'insufficient_evidence'} <= {b['cause'] for b in book}
+    assert all(b['actions'] and 'remediation' in b for b in book)
+    health = c.get('/api/health').json()
+    assert health['version'] and health['uptime_s'] >= 0 and health['llm_enabled'] is False
+    assert health['limits'] == {'max_upload_mb': 5, 'max_devices': 25000,
+                                'max_samples': 50000, 'runs_per_min': 10}
+
+
+def test_report_markdown(tmp_path):
+    c = _client(tmp_path)
+    run_id = _finished_run(c)
+    res = c.get(f'/api/runs/{run_id}/report.md')
+    assert res.status_code == 200 and res.headers['content-type'].startswith('text/markdown')
+    assert res.text.startswith('# Incident') and 'CORE_RTR_01' in res.text
+    assert c.get('/api/runs/nope/report.md').status_code == 404

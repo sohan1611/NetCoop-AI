@@ -81,7 +81,7 @@ class ReporterAgent(Agent):
                                     for item in diagnosis.get('alternatives', [])],
                 recommended_actions=PLAYBOOK[cause]['actions'],
                 evidence_sources=diagnosis['evidence_sources'],
-                limitations=list(dict.fromkeys(limitations)), run_id=run_id,
+                limitations=list(dict.fromkeys(limitations)), run_id=run_id, cause=cause,
             )
             self.narrative = None
             if self.use_llm:

@@ -7,6 +7,7 @@ import re
 import shutil
 import time
 from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,7 +17,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from netcoop.cli import _cause, _report, build_orchestrator
-from netcoop.playbook import simulate_remediation
+from netcoop import __version__
+from netcoop.agents.normalizer import MAX_DEVICES, MAX_SAMPLES
+from netcoop.details import build_details
+from netcoop.playbook import PLAYBOOK, simulate_remediation
 from netcoop.state import RunState
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,12 +40,27 @@ MAX_UPLOAD_BYTES = 5_000_000
 MAX_CONCURRENT_RUNS = 2
 RATE_LIMIT = 10  # runs per client IP per RATE_WINDOW_S
 RATE_WINDOW_S = 60
+RUN_LIST_LIMIT = 20
 
 
 class RunRequest(BaseModel):
     scenario: str | None = None
     upload_id: str | None = None
     fail_agent: str | None = None
+
+
+def _bounds(path: Path) -> list[dict]:
+    """First and last bus messages of a run (timestamps only are needed)."""
+    if not path.is_file():
+        return []
+    lines = [line for line in path.read_text(encoding='utf-8', errors='replace').splitlines() if line.strip()]
+    out = []
+    for line in (lines[:1] + lines[-1:]):
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            pass
+    return out
 
 
 def create_app(runs_dir: str | Path | None = None) -> FastAPI:
@@ -57,6 +76,7 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
 
     tasks: dict[str, asyncio.Task] = {}
     finished_at: dict[str, float] = {}
+    started = time.monotonic()
     hit_log: dict[str, deque] = {}
     active = [0]
 
@@ -231,6 +251,68 @@ def create_app(runs_dir: str | Path | None = None) -> FastAPI:
             data['cause'] = 'error'
             return data
         raise HTTPException(500, 'run produced no report')
+
+    @app.get('/api/runs/{run_id}/report.md')
+    async def report_markdown(run_id: str):
+        directory = run_dir(run_id)
+        await finished(run_id)
+        path = directory / 'report.md'
+        if not path.is_file():
+            raise HTTPException(404, 'no report for this run')
+        return FileResponse(path, media_type='text/markdown; charset=utf-8')
+
+    @app.get('/api/runs/{run_id}/details')
+    async def details(run_id: str) -> dict:
+        directory = run_dir(run_id)
+        await finished(run_id)
+        state_path = directory / 'state.json'
+        if not state_path.is_file():
+            raise HTTPException(404, 'run has no state')
+        try:
+            state = RunState.model_validate_json(state_path.read_text(encoding='utf-8'))
+        except ValueError:
+            raise HTTPException(409, 'run state is unreadable')
+        return await asyncio.to_thread(build_details, state, _bounds(directory / 'messages.jsonl'))
+
+    @app.get('/api/runs')
+    async def list_runs() -> list[dict]:
+        rows = []
+        if not runs.is_dir():
+            return rows
+        entries = [e for e in runs.iterdir() if e.is_dir() and e.name != 'uploads']
+        entries.sort(key=lambda e: e.stat().st_mtime, reverse=True)
+        for entry in entries[:RUN_LIST_LIMIT]:
+            task = tasks.get(entry.name)
+            created = datetime.fromtimestamp(entry.stat().st_mtime, timezone.utc).isoformat()
+            report_path = entry / 'report.json'
+            if report_path.is_file():
+                try:
+                    data = json.loads(report_path.read_text(encoding='utf-8'))
+                except ValueError:
+                    continue
+                rows.append({'run_id': entry.name, 'incident_id': data.get('incident_id'),
+                             'cause': data.get('cause') or data.get('status'),
+                             'status': data.get('status'), 'confidence': data.get('confidence'),
+                             'created_at': created})
+            elif (entry / 'state.json').is_file():
+                running = task is not None and not task.done()
+                rows.append({'run_id': entry.name, 'incident_id': None,
+                             'cause': None if running else 'error',
+                             'status': 'running' if running else 'error',
+                             'confidence': None, 'created_at': created})
+        return rows
+
+    @app.get('/api/playbook')
+    def playbook() -> list[dict]:
+        return [{'cause': cause, 'actions': item['actions'], 'remediation': item['remediation']}
+                for cause, item in PLAYBOOK.items()]
+
+    @app.get('/api/health')
+    def health() -> dict:
+        return {'version': __version__, 'uptime_s': round(time.monotonic() - started, 1),
+                'llm_enabled': False,
+                'limits': {'max_upload_mb': MAX_UPLOAD_BYTES // 1_000_000, 'max_devices': MAX_DEVICES,
+                           'max_samples': MAX_SAMPLES, 'runs_per_min': RATE_LIMIT}}
 
     @app.get('/api/runs/{run_id}/topology')
     async def topology(run_id: str) -> dict:

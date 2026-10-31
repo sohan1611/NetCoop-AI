@@ -342,6 +342,7 @@ class Orchestrator:
             evidence_sources=diagnosis["evidence_sources"],
             limitations=list(dict.fromkeys(state.limitations)),
             run_id=state.run_id,
+            cause=str(diagnosis["cause"]),
         )
 
     async def _call_agent(
