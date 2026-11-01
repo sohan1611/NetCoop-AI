@@ -20,3 +20,5 @@ docs/qa/NetCoop_Final_10Hour_Independent_Audit.pdf
 NetCoop_Final_10Hour_*
 .pytest-t3*/
 .t3*-pytest-*/
+*.mp4
+*.mov
