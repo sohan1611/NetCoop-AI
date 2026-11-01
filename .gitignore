@@ -22,3 +22,4 @@ NetCoop_Final_10Hour_*
 .t3*-pytest-*/
 *.mp4
 *.mov
+!docs/demo/*.mp4

@@ -3,7 +3,7 @@
 TechZephyr 4.0 Agentic AI Hackathon entry. Specialised agents analyse synthetic campus-network telemetry, exchange structured messages over a documented protocol, and produce one evidence-based diagnostic report. When the data does not support a diagnosis the system says **insufficient evidence** instead of guessing.
 
 **Live console:** https://netcoop-ai.vercel.app (UI on Vercel, API on Render)
-**Demo video (3–5 min):** _link added at submission_
+**Demo video (4:48):** [docs/demo/NetCoop-AI-demo.mp4](docs/demo/NetCoop-AI-demo.mp4) (1080p, 20 MB — click "View raw" to play or download)
 **Repo:** https://github.com/sohan1611/NetCoop-AI
 
 ![NetCoop AI console after a congestion run](docs/screenshots/console.png)
@@ -98,7 +98,7 @@ python scripts/evaluate.py --no-llm
 | Deliverable | Where |
 |---|---|
 | Source code (GitHub repo) | this repository: `netcoop/` (agents, bus, orchestrator), `api/` (FastAPI + console UI), `mcp_server.py` |
-| Demo video, 3–5 min | link at the top; script in [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) |
+| Demo video, 3–5 min | [docs/demo/NetCoop-AI-demo.mp4](docs/demo/NetCoop-AI-demo.mp4) (4:48); script in [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) |
 | README / architecture docs | this file, [docs/PLAN.md](docs/PLAN.md) (design), [docs/PROTOCOL.md](docs/PROTOCOL.md) (agent messages), [docs/UI_PLAN.md](docs/UI_PLAN.md) (console) |
 | Sample data | `data/scenarios/*.json` (16 scenarios incl. organizer format) + `labels.json` |
 | Test cases | `tests/` (pytest), `scripts/evaluate.py`, `scripts/stress_test.py`, `scripts/hostile_inputs.py` |
