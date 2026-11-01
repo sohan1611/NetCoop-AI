@@ -1,25 +1,33 @@
-runs/
-.env
+# Python / tooling
 __pycache__/
-*.pdf
-Plan.txt
-.venv/
 *.egg-info/
+.venv/
+.env
 .pytest_cache/
-.claude/
 .pytest-tmp*/
-NetCoop_AI_*
-docs/qa/findings.json
-docs/qa/NetCoop_AI_Adversarial_QA_Report.md
-.agents/
-docs/qa/NetCoop_AI_Reaudit_Oct31.md
-NetCoop_Reaudit_*
-docs/qa/NetCoop_AI_Third_Independent_Reaudit.md
-NetCoop_Third_Audit_*
-docs/qa/NetCoop_Final_10Hour_Independent_Audit.pdf
-NetCoop_Final_10Hour_*
 .pytest-t3*/
 .t3*-pytest-*/
+.claude/
+.agents/
+
+# Local run output
+runs/
+
+# Local-only material (hackathon brief, raw videos, audit packs)
+_local/
+*.pdf
+Plan.txt
+NetCoop_AI_*
+NetCoop_Final_10Hour_*
+NetCoop_Reaudit_*
+NetCoop_Third_Audit_*
+docs/qa/findings.json
+docs/qa/NetCoop_AI_Adversarial_QA_Report.md
+docs/qa/NetCoop_AI_Reaudit_Oct31.md
+docs/qa/NetCoop_AI_Third_Independent_Reaudit.md
+docs/qa/NetCoop_Final_10Hour_Independent_Audit.pdf
+
+# Video: only the submitted demo is tracked
 *.mp4
 *.mov
 !docs/demo/*.mp4
