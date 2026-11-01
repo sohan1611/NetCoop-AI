@@ -1,7 +1,7 @@
 # Demo script (target 4:30, hard limit 4:45)
 **Before recording**
-- Local (recommended, no cold start): `uvicorn api.server:app`, browser at http://127.0.0.1:8000, 1280×800 window, zoom 100 %.
-- Live alternative: open https://netcoop-ai.vercel.app/api/health 2 minutes before you start (wakes the Render backend, ~50 s from cold) and reload the console once you see `"status"`.
+- Live (recommended): https://netcoop-ai.vercel.app, 1280×800 window, zoom 100 %. The Render instance does not sleep, so no warm-up is needed.
+- Local alternative: `uvicorn api.server:app` in one terminal, browser at http://127.0.0.1:8000.
 - Terminal in the repo with the venv active; README open in a second tab. Close other tabs and notifications.
 - Each run takes about 1 s locally (**org hardware failure** about 4 s), so no waiting is scripted.
 

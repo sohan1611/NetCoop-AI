@@ -2,7 +2,7 @@
 
 TechZephyr 4.0 Agentic AI Hackathon entry. Specialised agents analyse synthetic campus-network telemetry, exchange structured messages over a documented protocol, and produce one evidence-based diagnostic report. When the data does not support a diagnosis the system says **insufficient evidence** instead of guessing.
 
-**Live console:** https://netcoop-ai.vercel.app (API on Render free tier: the first request after idle can take up to ~50 s while the backend wakes; the page shows a "Waking diagnostic backend…" banner meanwhile)
+**Live console:** https://netcoop-ai.vercel.app (UI on Vercel, API on Render)
 **Demo video (3–5 min):** _link added at submission_
 **Repo:** https://github.com/sohan1611/NetCoop-AI
 
