@@ -1,0 +1,23 @@
+# Render's free tier spins a web service down after 15 minutes without traffic.
+# Ping the health endpoint every 10 minutes so the API stays warm.
+name: keep-alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping API health
+        run: |
+          for i in 1 2 3; do
+            if curl -fsS --max-time 90 https://netcoop-ai-api.onrender.com/api/health; then exit 0; fi
+            sleep 20
+          done
+          exit 1

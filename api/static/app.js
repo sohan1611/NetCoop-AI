@@ -1177,4 +1177,15 @@ $('acknowledge-all').onclick = () => {
 };
 $('search').addEventListener('input', () => { state.search = $('search').value.trim().toLowerCase(); renderSearch(); });
 renderViews(); renderShell();
-init().catch((e) => { state.error = 'Error: ' + e.message; renderStates(); });
+// The free-tier backend may be asleep on first load: keep retrying for ~2 minutes while it wakes.
+(async function boot() {
+  for (let attempt = 1; ; attempt++) {
+    try { await init(); state.error = ''; renderStates(); return; }
+    catch (e) {
+      if (attempt >= 6) { state.error = 'Error: ' + e.message; renderStates(); return; }
+      state.backendPending++; renderStates();
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      state.backendPending--;
+    }
+  }
+})();
